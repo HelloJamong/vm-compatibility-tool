@@ -1,7 +1,0 @@
-D:\vs_code\vm-compatibility-tool\bin\Release\net8.0-windows\publish\VMFort Compatibility Tool.exe
-D:\vs_code\vm-compatibility-tool\bin\Release\net8.0-windows\publish\VMFort Compatibility Tool.dll
-D:\vs_code\vm-compatibility-tool\bin\Release\net8.0-windows\publish\VMFort Compatibility Tool.deps.json
-D:\vs_code\vm-compatibility-tool\bin\Release\net8.0-windows\publish\VMFort Compatibility Tool.runtimeconfig.json
-D:\vs_code\vm-compatibility-tool\bin\Release\net8.0-windows\publish\VMFort Compatibility Tool.pdb
-D:\vs_code\vm-compatibility-tool\bin\Release\net8.0-windows\publish\System.Management.dll
-D:\vs_code\vm-compatibility-tool\bin\Release\net8.0-windows\publish\runtimes\win\lib\net8.0\System.Management.dll
