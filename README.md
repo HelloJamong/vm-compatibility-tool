@@ -1,2 +1,86 @@
-# vm-compatibility-tool
-가상머신 사용을 위한 로컬PC 호환성 체크 도구 
+# VMFort Compatibility Tool
+
+VMware, VirtualBox 등의 가상머신 소프트웨어 사용을 위한 시스템 최적화 도구
+
+## 📋 프로젝트 개요
+
+VMFort Compatibility Tool은 Windows 시스템에서 가상머신을 원활하게 사용하기 위해 필요한 시스템 정보 확인 및 최적화 작업을 자동화하는 WPF 애플리케이션입니다.
+
+## 🎯 주요 기능
+
+### 1. **시스템 사양 체크**
+- **운영체제 정보**: Windows 버전, 빌드 번호, 에디션 확인
+- **CPU 정보**: 프로세서 모델, 제조사, 코어/스레드 수, 최대 클럭 속도
+- **메모리 정보**: 총 물리적 메모리, 사용 가능한 메모리
+- **디스크 정보**: 드라이브별 용량 정보, SSD/HDD 구분
+- **가상화 지원**: 하드웨어 가상화 활성화 여부, Hyper-V 상태, VBS 상태
+- **부팅 정보**: 마지막 부팅 시간, 시스템 가동 시간
+
+### 2. **VBS 및 Hyper-V 비활성화**
+가상머신 성능 최적화를 위해 Windows 보안 기능을 비활성화:
+
+- **Hyper-V 제거**: 모든 Hyper-V 관련 Windows 기능 비활성화
+- **WSL2 제거**: Windows Subsystem for Linux 및 Virtual Machine Platform 비활성화  
+- **VBS 비활성화**: 가상화 기반 보안(Virtualization-based Security) 비활성화
+- **코어 격리 비활성화**: 하이퍼바이저 코드 무결성(HVCI) 및 관련 보안 기능 비활성화
+- **자동 재부팅**: 작업 완료 후 즉시 재부팅 또는 나중에 재부팅 옵션 제공
+
+## 🖥️ 시스템 요구사항
+
+- **운영체제**: Windows 7 이상 (64비트)
+- **프레임워크**: .NET 8 Runtime (Self-contained 빌드의 경우 불필요)
+- **권한**: 시스템 정보 조회 및 Windows 기능 변경을 위한 관리자 권한
+
+## 🚀 사용법
+
+### 실행파일 다운로드
+1. 릴리즈 페이지에서 `VMFort Compatibility Tool.exe` 다운로드
+2. 관리자 권한으로 실행
+
+### 소스코드에서 빌드
+```bash
+# 프로젝트 클론
+git clone https://github.com/HelloJamong/vm-compatibility-tool.git
+cd vm-compatibility-tool
+
+# 개발용 실행
+dotnet run --project VmCompatibilityTool.csproj
+
+# 배포용 빌드 (단일 실행파일)
+dotnet publish VmCompatibilityTool.csproj -c Release
+```
+
+## ⚠️ 주의사항
+
+- **관리자 권한 필요**: 시스템 정보 수집 및 Windows 기능 변경을 위해 관리자 권한이 필요합니다
+- **보안 기능 비활성화**: VBS 및 Hyper-V 비활성화는 시스템 보안 수준을 낮출 수 있습니다
+- **재부팅 필요**: 변경사항 적용을 위해 시스템 재부팅이 필요합니다
+- **백업 권장**: 시스템 변경 전 중요 데이터 백업을 권장합니다
+
+## 🛠️ 기술 스택
+
+- **Language**: C# 12
+- **Framework**: .NET 8
+- **UI Framework**: WPF (Windows Presentation Foundation)
+- **Dependencies**: 
+  - System.Management (WMI 정보 수집)
+- **Build**: Single-file self-contained executable
+
+## 📝 라이선스
+
+이 프로젝트는 오픈 소스이며, 자유롭게 사용하실 수 있습니다.
+
+## 🤝 기여하기
+
+버그 리포트, 기능 제안, 코드 기여를 환영합니다!
+
+1. 이 저장소를 포크합니다
+2. 기능 브랜치를 생성합니다 (`git checkout -b feature/AmazingFeature`)
+3. 변경사항을 커밋합니다 (`git commit -m 'Add some AmazingFeature'`)
+4. 브랜치에 푸시합니다 (`git push origin feature/AmazingFeature`)
+5. Pull Request를 생성합니다
+
+---
+
+**개발자**: VMFort Team  
+**최종 업데이트**: 2025-09-08
