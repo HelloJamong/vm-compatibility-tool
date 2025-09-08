@@ -134,7 +134,10 @@
         
         <!-- Status Bar -->
         <Border Grid.Row="2" Background="#ECF0F1" Padding="10,5">
-            <TextBlock x:Name="StatusTextBlock" Text="준비됨" FontSize="12"/>
+            <Grid>
+                <TextBlock x:Name="StatusTextBlock" Text="준비됨" FontSize="12" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                <TextBlock x:Name="VersionTextBlock" Text="v1.0.0" FontSize="11" Foreground="#7F8C8D" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>

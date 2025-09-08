@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Management;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -14,6 +15,21 @@ namespace VmCompatibilityTool
         public MainWindow()
         {
             InitializeComponent();
+            SetVersionInfo();
+        }
+
+        private void SetVersionInfo()
+        {
+            try
+            {
+                var assembly = Assembly.GetExecutingAssembly();
+                var version = assembly.GetName().Version;
+                VersionTextBlock.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
+            }
+            catch
+            {
+                VersionTextBlock.Text = "v1.0.0";
+            }
         }
 
         private void ShowPanel(string panelName)
@@ -307,21 +323,137 @@ namespace VmCompatibilityTool
         {
             try
             {
-                using (var searcher = new ManagementObjectSearcher($"SELECT * FROM Win32_DiskDrive"))
+                // 방법 1: MSFT_PhysicalDisk (Windows 8/Server 2012 이상에서 가장 정확)
+                var ssdResult = CheckSSDWithMSFTPhysicalDisk(driveLetter);
+                if (ssdResult != "알 수 없음")
+                    return ssdResult;
+
+                // 방법 2: 논리 드라이브를 물리 드라이브와 연결하여 확인
+                using (var partitionSearcher = new ManagementObjectSearcher($"ASSOCIATORS OF {{Win32_LogicalDisk.DeviceID='{driveLetter}:'}} WHERE AssocClass = Win32_LogicalDiskToPartition"))
                 {
-                    foreach (ManagementObject obj in searcher.Get())
+                    foreach (ManagementObject partition in partitionSearcher.Get())
                     {
-                        var mediaType = obj["MediaType"]?.ToString();
-                        if (mediaType != null && mediaType.Contains("SSD"))
-                            return "SSD";
+                        using (var diskSearcher = new ManagementObjectSearcher($"ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{partition["DeviceID"]}'}} WHERE AssocClass = Win32_DiskDriveToDiskPartition"))
+                        {
+                            foreach (ManagementObject disk in diskSearcher.Get())
+                            {
+                                var diskIndex = disk["Index"]?.ToString();
+                                
+                                // Win32_DiskDrive 정보로 SSD 확인
+                                var result = CheckSSDWithWin32DiskDrive(diskIndex);
+                                if (result != "알 수 없음")
+                                    return result;
+                            }
+                        }
                     }
                 }
-                return "HDD";
+                
+                return "알 수 없음";
             }
             catch
             {
                 return "알 수 없음";
             }
+        }
+
+        private string CheckSSDWithMSFTPhysicalDisk(string driveLetter)
+        {
+            try
+            {
+                // MSFT_PhysicalDisk는 Storage WMI에서 가장 정확한 정보를 제공
+                using (var searcher = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT * FROM MSFT_PhysicalDisk"))
+                {
+                    foreach (ManagementObject disk in searcher.Get())
+                    {
+                        var mediaType = disk["MediaType"];
+                        var busType = disk["BusType"];
+                        
+                        if (mediaType != null)
+                        {
+                            var mediaTypeValue = Convert.ToUInt16(mediaType);
+                            // MediaType: 3 = HDD, 4 = SSD, 5 = SCM
+                            switch (mediaTypeValue)
+                            {
+                                case 4:
+                                    // BusType 확인해서 NVMe인지 구분
+                                    if (busType != null && Convert.ToUInt16(busType) == 17) // NVMe
+                                        return "SSD (NVMe)";
+                                    return "SSD";
+                                case 3:
+                                    return "HDD";
+                                case 5:
+                                    return "SCM (Storage Class Memory)";
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // MSFT_PhysicalDisk를 사용할 수 없는 경우 (권한 문제 등)
+            }
+            
+            return "알 수 없음";
+        }
+
+        private string CheckSSDWithWin32DiskDrive(string diskIndex)
+        {
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher($"SELECT * FROM Win32_DiskDrive WHERE Index={diskIndex}"))
+                {
+                    foreach (ManagementObject disk in searcher.Get())
+                    {
+                        var mediaType = disk["MediaType"]?.ToString() ?? "";
+                        var model = disk["Model"]?.ToString() ?? "";
+                        var interfaceType = disk["InterfaceType"]?.ToString() ?? "";
+                        
+                        // 1. MediaType 직접 확인
+                        if (mediaType.Contains("SSD", StringComparison.OrdinalIgnoreCase))
+                            return "SSD";
+                            
+                        // 2. 모델명에서 SSD 키워드 확인
+                        var ssdKeywords = new[] { "SSD", "Solid State", "NVMe", "M.2" };
+                        foreach (var keyword in ssdKeywords)
+                        {
+                            if (model.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (keyword == "NVMe" || model.Contains("NVMe", StringComparison.OrdinalIgnoreCase))
+                                    return "SSD (NVMe)";
+                                return "SSD";
+                            }
+                        }
+                        
+                        // 3. 제조사별 SSD 모델 패턴 확인
+                        var ssdPatterns = new[]
+                        {
+                            "Samsung.*SSD", "Intel.*SSD", "Crucial.*SSD", "WD.*SSD",
+                            "Kingston.*SSD", "Corsair.*SSD", "ADATA.*SSD", "Transcend.*SSD",
+                            "Micron.*SSD", "SK hynix.*SSD", "LITEON.*SSD", "Plextor.*SSD"
+                        };
+                        
+                        foreach (var pattern in ssdPatterns)
+                        {
+                            if (System.Text.RegularExpressions.Regex.IsMatch(model, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                                return "SSD";
+                        }
+                        
+                        // 4. SCSI 인터페이스 + 특정 패턴은 보통 SSD
+                        if (interfaceType.Contains("SCSI", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // NVMe는 대부분 SCSI 인터페이스로 보고됨
+                            if (model.Contains("NVMe", StringComparison.OrdinalIgnoreCase))
+                                return "SSD (NVMe)";
+                                
+                            // 회전 속도가 없거나 0인 경우 SSD일 가능성
+                            // (이 정보는 일부 드라이버에서만 제공)
+                        }
+                    }
+                }
+            }
+            catch { }
+            
+            return "알 수 없음";
         }
 
         private string GetVirtualizationInfo()
