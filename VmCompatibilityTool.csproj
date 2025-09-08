@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>VMFort Compatibility Tool</AssemblyName>
+    <AssemblyTitle>VMFort Compatibility Tool</AssemblyTitle>
+    <AssemblyDescription>VMFort - A tool for checking virtual machine compatibility</AssemblyDescription>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>VMFort Compatibility Tool</Product>
+    <Company>VMFort</Company>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
+    <SignAssembly>false</SignAssembly>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="icon.ico" />
+    <EmbeddedResource Include="icon.ico" />
+  </ItemGroup>
+
+</Project>

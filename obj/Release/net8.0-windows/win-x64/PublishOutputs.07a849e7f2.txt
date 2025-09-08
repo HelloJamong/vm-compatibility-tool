@@ -1,0 +1,1 @@
+D:\vs_code\vm-compatibility-tool\bin\Release\net8.0-windows\win-x64\publish\VMFort Compatibility Tool.exe

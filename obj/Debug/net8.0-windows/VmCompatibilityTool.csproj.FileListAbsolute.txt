@@ -1,0 +1,25 @@
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\MainWindow.baml
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\App.baml
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\MainWindow.g.cs
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\App.g.cs
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VmCompatibilityTool.GeneratedMSBuildEditorConfig.editorconfig
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VmCompatibilityTool.AssemblyInfoInputs.cache
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VmCompatibilityTool.AssemblyInfo.cs
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VmCompatibilityTool.csproj.CoreCompileInputs.cache
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VmCompatibilityTool.sourcelink.json
+D:\vs_code\vm-compatibility-tool\bin\Debug\net8.0-windows\System.Management.dll
+D:\vs_code\vm-compatibility-tool\bin\Debug\net8.0-windows\runtimes\win\lib\net8.0\System.Management.dll
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VmCompatibilityTool.csproj.AssemblyReference.cache
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VmCompat.7485F10A.Up2Date
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VmCompatibilityTool.genruntimeconfig.cache
+D:\vs_code\vm-compatibility-tool\bin\Debug\net8.0-windows\VMFort Compatibility Tool.exe
+D:\vs_code\vm-compatibility-tool\bin\Debug\net8.0-windows\VMFort Compatibility Tool.deps.json
+D:\vs_code\vm-compatibility-tool\bin\Debug\net8.0-windows\VMFort Compatibility Tool.runtimeconfig.json
+D:\vs_code\vm-compatibility-tool\bin\Debug\net8.0-windows\VMFort Compatibility Tool.dll
+D:\vs_code\vm-compatibility-tool\bin\Debug\net8.0-windows\VMFort Compatibility Tool.pdb
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VMFort Compatibility Tool_MarkupCompile.cache
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VMFort Compatibility Tool.g.resources
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VMFort Compatibility Tool.dll
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\refint\VMFort Compatibility Tool.dll
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\VMFort Compatibility Tool.pdb
+D:\vs_code\vm-compatibility-tool\obj\Debug\net8.0-windows\ref\VMFort Compatibility Tool.dll
