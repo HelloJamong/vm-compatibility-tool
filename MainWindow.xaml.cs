@@ -951,54 +951,196 @@ namespace VmCompatibilityTool
             try
             {
                 debugInfo.AppendLine("MSFT_PhysicalDisk 시도");
-                // MSFT_PhysicalDisk는 Storage WMI에서 가장 정확한 정보를 제공
+                
+                // 1단계: 드라이브 문자에서 물리 디스크 번호 찾기
+                int diskNumber = GetPhysicalDiskNumber(driveLetter, debugInfo);
+                if (diskNumber == -1)
+                {
+                    debugInfo.AppendLine("물리 디스크 번호를 찾을 수 없음, 모든 디스크 검색으로 폴백");
+                    return CheckAllMSFTPhysicalDisks(driveLetter, debugInfo);
+                }
+                
+                debugInfo.AppendLine($"드라이브 {driveLetter}는 물리 디스크 {diskNumber}번에 위치");
+                
+                // 2단계: 해당 물리 디스크의 MSFT_PhysicalDisk 정보 조회
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", 
+                        $"SELECT * FROM MSFT_PhysicalDisk WHERE DeviceId = {diskNumber}"))
+                    {
+                        foreach (ManagementObject disk in searcher.Get())
+                        {
+                            var result = GetDiskTypeFromMSFT(disk, debugInfo, diskNumber);
+                            if (result != "알 수 없음")
+                                return result;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    debugInfo.AppendLine($"특정 디스크 MSFT 쿼리 오류: {ex.Message}");
+                }
+                
+                // 3단계: 특정 디스크 쿼리가 실패하면 모든 디스크 검색
+                debugInfo.AppendLine("특정 디스크 쿼리 실패, 모든 디스크 검색으로 폴백");
+                return CheckAllMSFTPhysicalDisks(driveLetter, debugInfo);
+            }
+            catch (Exception ex)
+            {
+                debugInfo.AppendLine($"MSFT_PhysicalDisk 전체 오류: {ex.Message}");
+            }
+            
+            return "알 수 없음";
+        }
+
+        private string CheckAllMSFTPhysicalDisks(string driveLetter, StringBuilder debugInfo)
+        {
+            try
+            {
+                debugInfo.AppendLine("모든 MSFT_PhysicalDisk 검색 중");
                 using (var searcher = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT * FROM MSFT_PhysicalDisk"))
                 {
                     foreach (ManagementObject disk in searcher.Get())
                     {
-                        var mediaType = disk["MediaType"];
-                        var busType = disk["BusType"];
-                        var friendlyName = disk["FriendlyName"]?.ToString() ?? "";
-                        var model = disk["Model"]?.ToString() ?? "";
-                        
-                        debugInfo.AppendLine($"MSFT 디스크: {friendlyName}, 모델: {model}");
-                        
-                        if (mediaType != null)
+                        var result = GetDiskTypeFromMSFT(disk, debugInfo, null);
+                        if (result != "알 수 없음")
                         {
-                            var mediaTypeValue = Convert.ToUInt16(mediaType);
-                            debugInfo.AppendLine($"MediaType: {mediaTypeValue}");
-                            
-                            // MediaType: 3 = HDD, 4 = SSD, 5 = SCM
-                            switch (mediaTypeValue)
-                            {
-                                case 4:
-                                    // BusType 확인해서 NVMe인지 구분
-                                    if (busType != null && Convert.ToUInt16(busType) == 17) // NVMe
-                                        return "SSD (NVMe)";
-                                    return "SSD";
-                                case 3:
-                                    return "HDD";
-                                case 5:
-                                    return "SCM (Storage Class Memory)";
-                            }
-                        }
-                        
-                        // MediaType가 없는 경우 모델명으로 판단
-                        if (friendlyName.Contains("SSD", StringComparison.OrdinalIgnoreCase) ||
-                            model.Contains("SSD", StringComparison.OrdinalIgnoreCase) ||
-                            friendlyName.Contains("NVMe", StringComparison.OrdinalIgnoreCase))
-                        {
-                            return friendlyName.Contains("NVMe", StringComparison.OrdinalIgnoreCase) ? "SSD (NVMe)" : "SSD";
+                            debugInfo.AppendLine("첫 번째로 식별된 디스크 타입 반환");
+                            return result;
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                debugInfo.AppendLine($"MSFT_PhysicalDisk 오류: {ex.Message}");
+                debugInfo.AppendLine($"모든 MSFT 디스크 검색 오류: {ex.Message}");
             }
             
             return "알 수 없음";
+        }
+
+        private string GetDiskTypeFromMSFT(ManagementObject disk, StringBuilder debugInfo, int? diskNumber)
+        {
+            try
+            {
+                var mediaType = disk["MediaType"];
+                var busType = disk["BusType"];
+                var friendlyName = disk["FriendlyName"]?.ToString() ?? "";
+                var model = disk["Model"]?.ToString() ?? "";
+                
+                string diskInfo = diskNumber.HasValue ? $"디스크 {diskNumber}: " : "";
+                debugInfo.AppendLine($"MSFT {diskInfo}{friendlyName}, 모델: {model}");
+                
+                if (mediaType != null)
+                {
+                    var mediaTypeValue = Convert.ToUInt16(mediaType);
+                    debugInfo.AppendLine($"MediaType: {mediaTypeValue}");
+                    
+                    // MediaType: 3 = HDD, 4 = SSD, 5 = SCM
+                    switch (mediaTypeValue)
+                    {
+                        case 4:
+                            // BusType 확인해서 NVMe인지 구분
+                            if (busType != null && Convert.ToUInt16(busType) == 17) // NVMe
+                                return "SSD (NVMe)";
+                            return "SSD";
+                        case 3:
+                            return "HDD";
+                        case 5:
+                            return "SCM (Storage Class Memory)";
+                    }
+                }
+                
+                // MediaType가 없는 경우 모델명으로 판단 (확장된 패턴)
+                var ssdIndicators = new[] { 
+                    "SSD", "NVMe", "Solid State", "SHGS31", "SHGS", "GS-2", "Flash" 
+                };
+                
+                foreach (var indicator in ssdIndicators)
+                {
+                    if (friendlyName.Contains(indicator, StringComparison.OrdinalIgnoreCase) ||
+                        model.Contains(indicator, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (friendlyName.Contains("NVMe", StringComparison.OrdinalIgnoreCase) ||
+                            model.Contains("NVMe", StringComparison.OrdinalIgnoreCase))
+                            return "SSD (NVMe)";
+                        return "SSD";
+                    }
+                }
+                
+                return "알 수 없음";
+            }
+            catch (Exception ex)
+            {
+                debugInfo.AppendLine($"MSFT 디스크 정보 파싱 오류: {ex.Message}");
+                return "알 수 없음";
+            }
+        }
+
+        private int GetPhysicalDiskNumber(string driveLetter, StringBuilder debugInfo)
+        {
+            try
+            {
+                debugInfo.AppendLine($"드라이브 {driveLetter}의 물리 디스크 번호 찾는 중");
+                
+                // 방법 1: Win32_LogicalDiskToPartition 사용
+                string logicalDiskQuery = $"ASSOCIATORS OF {{Win32_LogicalDisk.DeviceID='{driveLetter}'}} WHERE AssocClass=Win32_LogicalDiskToPartition";
+                using (var searcher = new ManagementObjectSearcher(logicalDiskQuery))
+                {
+                    foreach (ManagementObject partition in searcher.Get())
+                    {
+                        debugInfo.AppendLine($"파티션 찾음: {partition["DeviceID"]}");
+                        
+                        // 파티션에서 물리 디스크 찾기
+                        string partitionQuery = $"ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{partition["DeviceID"]}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition";
+                        using (var diskSearcher = new ManagementObjectSearcher(partitionQuery))
+                        {
+                            foreach (ManagementObject disk in diskSearcher.Get())
+                            {
+                                var index = disk["Index"];
+                                if (index != null)
+                                {
+                                    int diskNumber = Convert.ToInt32(index);
+                                    debugInfo.AppendLine($"물리 디스크 번호: {diskNumber}");
+                                    return diskNumber;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // 방법 2: Win32_DiskPartition에서 직접 찾기
+                debugInfo.AppendLine("대체 방법: Win32_DiskPartition에서 직접 검색");
+                using (var searcher = new ManagementObjectSearcher("SELECT * FROM Win32_DiskPartition"))
+                {
+                    foreach (ManagementObject partition in searcher.Get())
+                    {
+                        string partitionQuery2 = $"ASSOCIATORS OF {{Win32_DiskPartition.DeviceID='{partition["DeviceID"]}'}} WHERE AssocClass=Win32_LogicalDiskToPartition";
+                        using (var logicalSearcher = new ManagementObjectSearcher(partitionQuery2))
+                        {
+                            foreach (ManagementObject logical in logicalSearcher.Get())
+                            {
+                                if (logical["DeviceID"]?.ToString() == driveLetter)
+                                {
+                                    var diskIndex = partition["DiskIndex"];
+                                    if (diskIndex != null)
+                                    {
+                                        int diskNumber = Convert.ToInt32(diskIndex);
+                                        debugInfo.AppendLine($"대체 방법으로 찾은 물리 디스크 번호: {diskNumber}");
+                                        return diskNumber;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                debugInfo.AppendLine($"물리 디스크 번호 찾기 오류: {ex.Message}");
+            }
+            
+            return -1; // 찾지 못함
         }
 
         private string CheckSSDWithRegistry(string driveLetter, StringBuilder debugInfo)
@@ -1120,7 +1262,7 @@ namespace VmCompatibilityTool
                         // 3. 모델명에서 SSD 키워드 확인 (확장된 키워드 목록)
                         var ssdKeywords = new[] { 
                             "SSD", "Solid State", "NVMe", "M.2", "mSATA", "PCIe",
-                            "Flash", "NAND", "eUFS" // 추가 SSD 관련 키워드
+                            "Flash", "NAND", "eUFS", "SATA SSD", "NGFF" // 추가 SSD 관련 키워드
                         };
                         foreach (var keyword in ssdKeywords)
                         {
@@ -1155,7 +1297,11 @@ namespace VmCompatibilityTool
                             "Team.*SSD", "Gigabyte.*SSD", "MSI.*SSD",
                             // 특정 모델명 패턴
                             ".*980.*PRO", ".*980.*EVO", ".*970.*EVO", ".*960.*EVO",
-                            ".*P31.*Gold", ".*P41.*Plus", ".*Black.*SN.*"
+                            ".*P31.*Gold", ".*P41.*Plus", ".*Black.*SN.*",
+                            // 일반적인 SSD 모델명 패턴 (숫자-문자-숫자 조합)
+                            "SHGS.*-.*GS", "SH.*GS.*-.*", "SHGS31-500GS-2", "[A-Z]{2,5}[0-9]{2,3}-[0-9]{3}[A-Z]{1,3}-[0-9]",
+                            // 더 많은 제조사별 패턴
+                            "GALAX.*SSD", "ZOTAC.*SSD", "HIKVISION.*SSD", "AORUS.*SSD"
                         };
                         
                         foreach (var pattern in ssdPatterns)
