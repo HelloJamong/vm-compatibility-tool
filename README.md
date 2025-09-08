@@ -66,21 +66,6 @@ dotnet publish VmCompatibilityTool.csproj -c Release
   - System.Management (WMI 정보 수집)
 - **Build**: Single-file self-contained executable
 
-## 📝 라이선스
 
-이 프로젝트는 오픈 소스이며, 자유롭게 사용하실 수 있습니다.
 
-## 🤝 기여하기
-
-버그 리포트, 기능 제안, 코드 기여를 환영합니다!
-
-1. 이 저장소를 포크합니다
-2. 기능 브랜치를 생성합니다 (`git checkout -b feature/AmazingFeature`)
-3. 변경사항을 커밋합니다 (`git commit -m 'Add some AmazingFeature'`)
-4. 브랜치에 푸시합니다 (`git push origin feature/AmazingFeature`)
-5. Pull Request를 생성합니다
-
----
-
-**개발자**: VMFort Team  
 **최종 업데이트**: 2025-09-08
