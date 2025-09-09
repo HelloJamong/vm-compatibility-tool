@@ -1,9 +1,10 @@
 <Window x:Class="VmCompatibilityTool.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="VMFort Compatibility Tool" Height="600" Width="900"
+        Title="VMFort Compatibility Tool" Height="750" Width="1100"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="CanResizeWithGrip">
+        ResizeMode="CanResizeWithGrip"
+        MinHeight="600" MinWidth="900">
     
     <Grid>
         <Grid.RowDefinitions>
@@ -72,17 +73,37 @@
                        BorderBrush="Transparent"
                        Margin="0,0,0,10"/>
                 
-                <TextBlock Text="시스템 상세 정보" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
+                <Grid Margin="0,0,0,10">
+                    <TextBlock Text="시스템 상세 정보" FontSize="18" FontWeight="Bold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                    <Button x:Name="ExportSystemInfoButton" 
+                           Content="📄 CSV로 내보내기" 
+                           Click="ExportSystemInfoButton_Click"
+                           HorizontalAlignment="Right"
+                           Background="#27AE60" 
+                           Foreground="White" 
+                           BorderBrush="Transparent"
+                           Padding="10,5"
+                           FontSize="12"/>
+                </Grid>
                 
-                <TextBox x:Name="SystemInfoTextBox" 
-                        Height="450" 
-                        IsReadOnly="True" 
-                        VerticalScrollBarVisibility="Auto"
-                        TextWrapping="Wrap"
-                        Background="#F8F9FA"
-                        FontFamily="Consolas"
-                        FontSize="11"
-                        Text="시스템 정보를 로드하고 있습니다..."/>
+                <DataGrid x:Name="SystemInfoDataGrid" 
+                         MaxHeight="500" 
+                         IsReadOnly="True"
+                         AutoGenerateColumns="False"
+                         HeadersVisibility="Column"
+                         GridLinesVisibility="Horizontal"
+                         AlternatingRowBackground="#F8F9FA"
+                         Background="White"
+                         BorderBrush="#DDD"
+                         BorderThickness="1"
+                         FontSize="12"
+                         RowHeight="25">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="항목" Binding="{Binding Category}" Width="120" FontWeight="Bold"/>
+                        <DataGridTextColumn Header="세부 정보" Binding="{Binding Item}" Width="150"/>
+                        <DataGridTextColumn Header="값" Binding="{Binding Value}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
             </StackPanel>
 
             <!-- VBS/Hyper-V Disable Panel -->
@@ -133,7 +154,7 @@
                        Margin="0,15"/>
                 
                 <TextBox x:Name="DisableResultTextBox" 
-                        Height="300" 
+                        MaxHeight="350" 
                         IsReadOnly="True" 
                         VerticalScrollBarVisibility="Auto"
                         TextWrapping="Wrap"
@@ -153,17 +174,38 @@
                        BorderBrush="Transparent"
                        Margin="0,0,0,10"/>
                 
-                <TextBlock Text="가상화 설정 점검" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
+                <Grid Margin="0,0,0,10">
+                    <TextBlock Text="가상화 설정 점검" FontSize="18" FontWeight="Bold" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                    <Button x:Name="ExportVirtualizationInfoButton" 
+                           Content="📄 CSV로 내보내기" 
+                           Click="ExportVirtualizationInfoButton_Click"
+                           HorizontalAlignment="Right"
+                           Background="#27AE60" 
+                           Foreground="White" 
+                           BorderBrush="Transparent"
+                           Padding="10,5"
+                           FontSize="12"/>
+                </Grid>
                 
-                <TextBox x:Name="VirtualizationInfoTextBox" 
-                        Height="450" 
-                        IsReadOnly="True" 
-                        VerticalScrollBarVisibility="Auto"
-                        TextWrapping="Wrap"
-                        Background="#F8F9FA"
-                        FontFamily="Consolas"
-                        FontSize="11"
-                        Text="가상화 설정 정보를 로드하고 있습니다..."/>
+                <DataGrid x:Name="VirtualizationDataGrid" 
+                         MaxHeight="500" 
+                         IsReadOnly="True"
+                         AutoGenerateColumns="False"
+                         HeadersVisibility="Column"
+                         GridLinesVisibility="Horizontal"
+                         AlternatingRowBackground="#F8F9FA"
+                         Background="White"
+                         BorderBrush="#DDD"
+                         BorderThickness="1"
+                         FontSize="12"
+                         RowHeight="30">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="항목" Binding="{Binding Category}" Width="150" FontWeight="Bold"/>
+                        <DataGridTextColumn Header="상태" Binding="{Binding Status}" Width="100"/>
+                        <DataGridTextColumn Header="상세 정보" Binding="{Binding Details}" Width="*"/>
+                        <DataGridTextColumn Header="권장사항" Binding="{Binding Recommendation}" Width="200"/>
+                    </DataGrid.Columns>
+                </DataGrid>
             </StackPanel>
         </Grid>
         

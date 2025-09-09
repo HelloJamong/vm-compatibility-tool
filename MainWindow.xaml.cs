@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -15,6 +17,21 @@ using Microsoft.Win32;
 
 namespace VmCompatibilityTool
 {
+    public class SystemInfoItem
+    {
+        public string Category { get; set; }
+        public string Item { get; set; }
+        public string Value { get; set; }
+    }
+
+    public class VirtualizationInfoItem
+    {
+        public string Category { get; set; }
+        public string Status { get; set; }
+        public string Details { get; set; }
+        public string Recommendation { get; set; }
+    }
+
     public partial class MainWindow : Window
     {
 
@@ -346,7 +363,6 @@ namespace VmCompatibilityTool
             try
             {
                 // UI 초기화
-                SystemInfoTextBox.Text = "시스템 정보를 수집하고 있습니다...\n";
                 StatusTextBlock.Text = "시스템 정보 수집 중...";
                 
                 // 시스템 정보 수집 버튼 비활성화
@@ -366,8 +382,16 @@ namespace VmCompatibilityTool
             {
                 Dispatcher.Invoke(() =>
                 {
-                    SystemInfoTextBox.Text = "시스템 정보 수집이 시간 초과로 인해 중단되었습니다.\n" +
-                                           "일부 정보만 표시될 수 있습니다.";
+                    var errorItems = new ObservableCollection<SystemInfoItem>
+                    {
+                        new SystemInfoItem 
+                        { 
+                            Category = "오류", 
+                            Item = "시간 초과", 
+                            Value = "시스템 정보 수집이 시간 초과로 중단되었습니다" 
+                        }
+                    };
+                    SystemInfoDataGrid.ItemsSource = errorItems;
                     StatusTextBlock.Text = "시스템 정보 수집 시간 초과";
                 });
             }
@@ -375,8 +399,16 @@ namespace VmCompatibilityTool
             {
                 Dispatcher.Invoke(() =>
                 {
-                    SystemInfoTextBox.Text = $"시스템 정보 수집 중 오류가 발생했습니다: {ex.Message}\n\n" +
-                                           "관리자 권한으로 프로그램을 실행하거나 잠시 후 다시 시도해 보세요.";
+                    var errorItems = new ObservableCollection<SystemInfoItem>
+                    {
+                        new SystemInfoItem 
+                        { 
+                            Category = "오류", 
+                            Item = "수집 실패", 
+                            Value = $"오류: {ex.Message}" 
+                        }
+                    };
+                    SystemInfoDataGrid.ItemsSource = errorItems;
                     StatusTextBlock.Text = "시스템 정보 수집 실패";
                 });
             }
@@ -396,27 +428,61 @@ namespace VmCompatibilityTool
 
         private void CollectSystemInfo()
         {
-            var result = new StringBuilder();
-            result.AppendLine("=== 시스템 상세 정보 ===");
-            result.AppendLine();
+            var systemInfoItems = new ObservableCollection<SystemInfoItem>();
 
             try
             {
                 // 각 정보 수집을 개별적으로 try-catch로 보호
-                CollectOSInfo(result);
-                CollectCPUInfo(result);
-                CollectMemoryInfo(result);
-                CollectDiskInfo(result);
-                CollectBootInfo(result);
+                CollectOSInfoToTable(systemInfoItems);
+                CollectCPUInfoToTable(systemInfoItems);
+                CollectMemoryInfoToTable(systemInfoItems);
+                CollectDiskInfoToTable(systemInfoItems);
+                CollectBootInfoToTable(systemInfoItems);
 
                 // UI 업데이트를 더 안전하게 처리
-                SafeUpdateUI(result.ToString(), "시스템 정보 수집 완료");
+                SafeUpdateSystemInfoUI(systemInfoItems, "시스템 정보 수집 완료");
             }
             catch (Exception ex)
             {
                 // 예외 발생 시에도 안전하게 UI 업데이트
-                var errorMessage = $"심각한 오류 발생: {ex.Message}\n\n스택 추적:\n{ex.StackTrace}\n\n수집된 정보:\n{result.ToString()}";
-                SafeUpdateUI(errorMessage, "시스템 정보 수집 실패");
+                systemInfoItems.Add(new SystemInfoItem 
+                { 
+                    Category = "오류", 
+                    Item = "시스템 정보 수집 실패", 
+                    Value = $"오류: {ex.Message}" 
+                });
+                SafeUpdateSystemInfoUI(systemInfoItems, "시스템 정보 수집 실패");
+            }
+        }
+
+        private void SafeUpdateSystemInfoUI(ObservableCollection<SystemInfoItem> items, string status)
+        {
+            try
+            {
+                if (Dispatcher.CheckAccess())
+                {
+                    SystemInfoDataGrid.ItemsSource = items;
+                    StatusTextBlock.Text = status;
+                }
+                else
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        try
+                        {
+                            SystemInfoDataGrid.ItemsSource = items;
+                            StatusTextBlock.Text = status;
+                        }
+                        catch (Exception uiEx)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"시스템 정보 UI 업데이트 실패: {uiEx.Message}");
+                        }
+                    });
+                }
+            }
+            catch (Exception dispatcherEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"시스템 정보 Dispatcher 오류: {dispatcherEx.Message}");
             }
         }
 
@@ -459,28 +525,7 @@ namespace VmCompatibilityTool
         {
             try
             {
-                // UI 컨트롤이 유효한지 확인
-                if (SystemInfoTextBox != null)
-                {
-                    try
-                    {
-                        // 텍스트 내용을 안전하게 설정
-                        SafeSetTextBoxContent(SystemInfoTextBox, content ?? "정보를 가져올 수 없습니다.");
-                    }
-                    catch (Exception textEx)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"TextBox 업데이트 오류: {textEx.Message}");
-                        // TextBox 업데이트 실패 시 기본 텍스트 설정 시도
-                        try
-                        {
-                            SystemInfoTextBox.Text = $"텍스트 표시 오류 발생: {textEx.Message}\n\n원본 내용 길이: {content?.Length ?? 0} 문자";
-                        }
-                        catch
-                        {
-                            // 완전히 실패한 경우 포기
-                        }
-                    }
-                }
+                // 이 메소드는 더 이상 사용되지 않음 - 테이블 형식으로 변경됨
                 
                 if (StatusTextBlock != null)
                 {
@@ -1912,7 +1957,6 @@ namespace VmCompatibilityTool
             try
             {
                 // UI 초기화
-                VirtualizationInfoTextBox.Text = "가상화 설정 정보를 수집하고 있습니다...\n";
                 StatusTextBlock.Text = "가상화 설정 수집 중...";
                 
                 // 가상화 점검 버튼 비활성화
@@ -1932,8 +1976,17 @@ namespace VmCompatibilityTool
             {
                 Dispatcher.Invoke(() =>
                 {
-                    VirtualizationInfoTextBox.Text = "가상화 설정 수집이 시간 초과로 인해 중단되었습니다.\n" +
-                                                   "일부 정보만 표시될 수 있습니다.";
+                    var errorItems = new ObservableCollection<VirtualizationInfoItem>
+                    {
+                        new VirtualizationInfoItem 
+                        { 
+                            Category = "오류", 
+                            Status = "시간 초과",
+                            Details = "가상화 설정 수집이 시간 초과로 중단되었습니다",
+                            Recommendation = "프로그램을 다시 시도해 보세요"
+                        }
+                    };
+                    VirtualizationDataGrid.ItemsSource = errorItems;
                     StatusTextBlock.Text = "가상화 설정 수집 시간 초과";
                 });
             }
@@ -1941,8 +1994,17 @@ namespace VmCompatibilityTool
             {
                 Dispatcher.Invoke(() =>
                 {
-                    VirtualizationInfoTextBox.Text = $"가상화 설정 수집 중 오류가 발생했습니다: {ex.Message}\n\n" +
-                                                   "관리자 권한으로 프로그램을 실행하거나 잠시 후 다시 시도해 보세요.";
+                    var errorItems = new ObservableCollection<VirtualizationInfoItem>
+                    {
+                        new VirtualizationInfoItem 
+                        { 
+                            Category = "오류", 
+                            Status = "수집 실패",
+                            Details = $"오류: {ex.Message}",
+                            Recommendation = "관리자 권한으로 실행하세요"
+                        }
+                    };
+                    VirtualizationDataGrid.ItemsSource = errorItems;
                     StatusTextBlock.Text = "가상화 설정 수집 실패";
                 });
             }
@@ -1962,35 +2024,39 @@ namespace VmCompatibilityTool
 
         private void CollectVirtualizationSettings()
         {
-            var result = new StringBuilder();
-            result.AppendLine("=== 가상화 설정 점검 ===");
-            result.AppendLine();
+            var virtualizationItems = new ObservableCollection<VirtualizationInfoItem>();
 
             try
             {
                 // 1. 하드웨어 가상화 지원 확인
-                CheckHardwareVirtualization(result);
+                CheckHardwareVirtualizationToTable(virtualizationItems);
                 
                 // 2. WSL 설치 상태 확인
-                CheckWSLInstallation(result);
+                CheckWSLInstallationToTable(virtualizationItems);
                 
                 // 3. Hyper-V 설치 상태 확인
-                CheckHyperVInstallationDetailed(result);
+                CheckHyperVInstallationDetailedToTable(virtualizationItems);
                 
                 // 4. bcdedit hypervisorlaunchtype 확인
-                CheckHypervisorLaunchType(result);
+                CheckHypervisorLaunchTypeToTable(virtualizationItems);
                 
                 // 5. VBS 상태 및 레지스트리 정보 확인
-                CheckVBSStatusDetailed(result);
+                CheckVBSStatusDetailedToTable(virtualizationItems);
 
                 // UI 업데이트를 더 안전하게 처리
-                SafeUpdateVirtualizationUI(result.ToString(), "가상화 설정 수집 완료");
+                SafeUpdateVirtualizationTableUI(virtualizationItems, "가상화 설정 수집 완료");
             }
             catch (Exception ex)
             {
                 // 예외 발생 시에도 안전하게 UI 업데이트
-                var errorMessage = $"심각한 오류 발생: {ex.Message}\n\n스택 추적:\n{ex.StackTrace}\n\n수집된 정보:\n{result.ToString()}";
-                SafeUpdateVirtualizationUI(errorMessage, "가상화 설정 수집 실패");
+                virtualizationItems.Add(new VirtualizationInfoItem
+                {
+                    Category = "오류",
+                    Status = "심각한 오류",
+                    Details = ex.Message,
+                    Recommendation = "프로그램을 재시작하세요"
+                });
+                SafeUpdateVirtualizationTableUI(virtualizationItems, "가상화 설정 수집 실패");
             }
         }
 
@@ -2027,10 +2093,7 @@ namespace VmCompatibilityTool
         {
             try
             {
-                if (VirtualizationInfoTextBox != null)
-                {
-                    SafeSetTextBoxContent(VirtualizationInfoTextBox, content ?? "정보를 가져올 수 없습니다.");
-                }
+                // VirtualizationInfoTextBox는 더 이상 사용되지 않음 - 테이블 형식으로 변경됨
                 
                 if (StatusTextBlock != null)
                 {
@@ -2728,6 +2791,784 @@ namespace VmCompatibilityTool
             {
                 MessageBox.Show("나중에 수동으로 시스템을 재부팅해 주세요.", "알림", MessageBoxButton.OK, MessageBoxImage.Information);
             }
+        }
+
+        private void SafeUpdateVirtualizationTableUI(ObservableCollection<VirtualizationInfoItem> items, string status)
+        {
+            try
+            {
+                if (Dispatcher.CheckAccess())
+                {
+                    VirtualizationDataGrid.ItemsSource = items;
+                    StatusTextBlock.Text = status;
+                }
+                else
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        try
+                        {
+                            VirtualizationDataGrid.ItemsSource = items;
+                            StatusTextBlock.Text = status;
+                        }
+                        catch (Exception uiEx)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"가상화 테이블 UI 업데이트 실패: {uiEx.Message}");
+                        }
+                    });
+                }
+            }
+            catch (Exception dispatcherEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"가상화 테이블 Dispatcher 오류: {dispatcherEx.Message}");
+            }
+        }
+
+        // 테이블 형식 시스템 정보 수집 메소드들
+        private void CollectOSInfoToTable(ObservableCollection<SystemInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("운영체제 정보 수집 중...");
+                var osInfo = GetWindowsVersionInfo();
+                
+                // OS 정보를 파싱하여 테이블 형식으로 변환
+                var lines = osInfo.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines)
+                {
+                    var trimmedLine = line.Trim();
+                    if (trimmedLine.Contains(":"))
+                    {
+                        var parts = trimmedLine.Split(':', 2);
+                        if (parts.Length == 2)
+                        {
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "운영체제",
+                                Item = parts[0].Trim(),
+                                Value = parts[1].Trim()
+                            });
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(trimmedLine) && !trimmedLine.StartsWith("="))
+                    {
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "운영체제",
+                            Item = "정보",
+                            Value = trimmedLine
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SystemInfoItem
+                {
+                    Category = "운영체제",
+                    Item = "오류",
+                    Value = $"정보 수집 실패: {ex.Message}"
+                });
+            }
+        }
+
+        private void CollectCPUInfoToTable(ObservableCollection<SystemInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("프로세서 정보 수집 중...");
+                var cpuInfo = GetCpuInfo();
+                
+                var lines = cpuInfo.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines)
+                {
+                    var trimmedLine = line.Trim();
+                    if (trimmedLine.Contains(":"))
+                    {
+                        var parts = trimmedLine.Split(':', 2);
+                        if (parts.Length == 2)
+                        {
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "프로세서",
+                                Item = parts[0].Trim(),
+                                Value = parts[1].Trim()
+                            });
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(trimmedLine) && !trimmedLine.StartsWith("="))
+                    {
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "프로세서",
+                            Item = "정보",
+                            Value = trimmedLine
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SystemInfoItem
+                {
+                    Category = "프로세서",
+                    Item = "오류",
+                    Value = $"정보 수집 실패: {ex.Message}"
+                });
+            }
+        }
+
+        private void CollectMemoryInfoToTable(ObservableCollection<SystemInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("메모리 정보 수집 중...");
+                var memoryInfo = GetMemoryInfo();
+                
+                var lines = memoryInfo.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines)
+                {
+                    var trimmedLine = line.Trim();
+                    if (trimmedLine.Contains(":"))
+                    {
+                        var parts = trimmedLine.Split(':', 2);
+                        if (parts.Length == 2)
+                        {
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "메모리",
+                                Item = parts[0].Trim(),
+                                Value = parts[1].Trim()
+                            });
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(trimmedLine) && !trimmedLine.StartsWith("="))
+                    {
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "메모리",
+                            Item = "정보",
+                            Value = trimmedLine
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SystemInfoItem
+                {
+                    Category = "메모리",
+                    Item = "오류",
+                    Value = $"정보 수집 실패: {ex.Message}"
+                });
+            }
+        }
+
+        private void CollectDiskInfoToTable(ObservableCollection<SystemInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("디스크 정보 수집 중...");
+                var diskInfo = GetDiskInfo();
+                
+                var lines = diskInfo.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines)
+                {
+                    var trimmedLine = line.Trim();
+                    if (trimmedLine.Contains(":"))
+                    {
+                        var parts = trimmedLine.Split(':', 2);
+                        if (parts.Length == 2)
+                        {
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "디스크",
+                                Item = parts[0].Trim(),
+                                Value = parts[1].Trim()
+                            });
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(trimmedLine) && !trimmedLine.StartsWith("=") && !trimmedLine.StartsWith("드라이브"))
+                    {
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "디스크",
+                            Item = "정보",
+                            Value = trimmedLine
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SystemInfoItem
+                {
+                    Category = "디스크",
+                    Item = "오류",
+                    Value = $"정보 수집 실패: {ex.Message}"
+                });
+            }
+        }
+
+        private void CollectBootInfoToTable(ObservableCollection<SystemInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("부팅 정보 수집 중...");
+                
+                // 부팅 시간 정보 수집
+                try
+                {
+                    // Environment.TickCount를 사용하여 시스템 가동 시간 계산
+                    var uptimeMs = Environment.TickCount;
+                    var uptime = TimeSpan.FromMilliseconds(uptimeMs);
+                    
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "부팅 정보",
+                        Item = "시스템 가동 시간",
+                        Value = $"{uptime.Days}일 {uptime.Hours}시간 {uptime.Minutes}분"
+                    });
+                    
+                    var bootTime = DateTime.Now - uptime;
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "부팅 정보",
+                        Item = "마지막 부팅 시간 (추정)",
+                        Value = bootTime.ToString("yyyy-MM-dd HH:mm:ss")
+                    });
+                }
+                catch (Exception bootEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "부팅 정보",
+                        Item = "부팅 시간",
+                        Value = $"확인 불가: {bootEx.Message}"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SystemInfoItem
+                {
+                    Category = "부팅 정보",
+                    Item = "오류",
+                    Value = $"정보 수집 실패: {ex.Message}"
+                });
+            }
+        }
+
+        // 테이블 형식 가상화 정보 수집 메소드들
+        private void CheckHardwareVirtualizationToTable(ObservableCollection<VirtualizationInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("하드웨어 가상화 지원 확인 중...");
+                
+                using (var searcher = new ManagementObjectSearcher("SELECT VirtualizationFirmwareEnabled FROM Win32_Processor"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        var isEnabled = obj["VirtualizationFirmwareEnabled"];
+                        if (isEnabled != null && (bool)isEnabled)
+                        {
+                            items.Add(new VirtualizationInfoItem
+                            {
+                                Category = "하드웨어 가상화",
+                                Status = "✓ 활성화",
+                                Details = "CPU에서 가상화 기술을 지원하며 BIOS/UEFI에서 활성화되어 있습니다",
+                                Recommendation = "정상 상태"
+                            });
+                        }
+                        else
+                        {
+                            items.Add(new VirtualizationInfoItem
+                            {
+                                Category = "하드웨어 가상화",
+                                Status = "✗ 비활성화",
+                                Details = "BIOS/UEFI에서 비활성화되어 있거나 지원되지 않습니다",
+                                Recommendation = "BIOS/UEFI에서 Intel VT-x 또는 AMD-V 활성화"
+                            });
+                        }
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new VirtualizationInfoItem
+                {
+                    Category = "하드웨어 가상화",
+                    Status = "✗ 오류",
+                    Details = $"확인 실패: {ex.Message}",
+                    Recommendation = "관리자 권한으로 실행"
+                });
+            }
+        }
+
+        private void CheckWSLInstallationToTable(ObservableCollection<VirtualizationInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("WSL 설치 상태 확인 중...");
+
+                var wslFeatures = new[]
+                {
+                    ("Microsoft-Windows-Subsystem-Linux", "WSL 1"),
+                    ("VirtualMachinePlatform", "가상 머신 플랫폼 (WSL 2)")
+                };
+
+                foreach (var (featureName, displayName) in wslFeatures)
+                {
+                    try
+                    {
+                        var process = new Process
+                        {
+                            StartInfo = new ProcessStartInfo
+                            {
+                                FileName = "dism.exe",
+                                Arguments = $"/online /get-featureinfo /featurename:{featureName}",
+                                UseShellExecute = false,
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                CreateNoWindow = true
+                            }
+                        };
+                        
+                        process.Start();
+                        var output = process.StandardOutput.ReadToEnd();
+                        process.WaitForExit();
+                        
+                        string status, recommendation;
+                        if (output.Contains("State : Enabled"))
+                        {
+                            status = "✓ 설치됨 (활성화)";
+                            recommendation = "가상화 성능 영향 가능 - 비활성화 권장";
+                        }
+                        else if (output.Contains("State : Disabled"))
+                        {
+                            status = "○ 설치됨 (비활성화)";
+                            recommendation = "필요시 활성화";
+                        }
+                        else
+                        {
+                            status = "○ 설치되지 않음";
+                            recommendation = "필요시 설치";
+                        }
+
+                        items.Add(new VirtualizationInfoItem
+                        {
+                            Category = displayName,
+                            Status = status,
+                            Details = $"Windows 기능: {featureName}",
+                            Recommendation = recommendation
+                        });
+                    }
+                    catch
+                    {
+                        items.Add(new VirtualizationInfoItem
+                        {
+                            Category = displayName,
+                            Status = "? 확인 불가",
+                            Details = "상태 확인 실패",
+                            Recommendation = "관리자 권한으로 재시도"
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new VirtualizationInfoItem
+                {
+                    Category = "WSL 상태",
+                    Status = "✗ 오류",
+                    Details = $"확인 실패: {ex.Message}",
+                    Recommendation = "관리자 권한으로 실행"
+                });
+            }
+        }
+
+        private void CheckHyperVInstallationDetailedToTable(ObservableCollection<VirtualizationInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("Hyper-V 설치 상태 확인 중...");
+
+                var hyperVFeatures = new[]
+                {
+                    ("Microsoft-Hyper-V-All", "Hyper-V (전체)"),
+                    ("Microsoft-Hyper-V", "Hyper-V 플랫폼"),
+                    ("Microsoft-Hyper-V-Hypervisor", "Hyper-V 하이퍼바이저")
+                };
+
+                foreach (var (featureName, displayName) in hyperVFeatures)
+                {
+                    try
+                    {
+                        var process = new Process
+                        {
+                            StartInfo = new ProcessStartInfo
+                            {
+                                FileName = "dism.exe",
+                                Arguments = $"/online /get-featureinfo /featurename:{featureName}",
+                                UseShellExecute = false,
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                CreateNoWindow = true
+                            }
+                        };
+                        
+                        process.Start();
+                        var output = process.StandardOutput.ReadToEnd();
+                        process.WaitForExit();
+                        
+                        string status, recommendation;
+                        if (output.Contains("State : Enabled"))
+                        {
+                            status = "✓ 설치됨 (활성화)";
+                            recommendation = "다른 가상화 소프트웨어와 충돌 - 비활성화 권장";
+                        }
+                        else if (output.Contains("State : Disabled"))
+                        {
+                            status = "○ 설치됨 (비활성화)";
+                            recommendation = "필요시 활성화";
+                        }
+                        else
+                        {
+                            status = "○ 설치되지 않음";
+                            recommendation = "다른 가상화 소프트웨어 사용 가능";
+                        }
+
+                        items.Add(new VirtualizationInfoItem
+                        {
+                            Category = displayName,
+                            Status = status,
+                            Details = $"Windows 기능: {featureName}",
+                            Recommendation = recommendation
+                        });
+                    }
+                    catch
+                    {
+                        items.Add(new VirtualizationInfoItem
+                        {
+                            Category = displayName,
+                            Status = "? 확인 불가",
+                            Details = "상태 확인 실패",
+                            Recommendation = "관리자 권한으로 재시도"
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new VirtualizationInfoItem
+                {
+                    Category = "Hyper-V 상태",
+                    Status = "✗ 오류",
+                    Details = $"확인 실패: {ex.Message}",
+                    Recommendation = "관리자 권한으로 실행"
+                });
+            }
+        }
+
+        private void CheckHypervisorLaunchTypeToTable(ObservableCollection<VirtualizationInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("하이퍼바이저 시작 유형 확인 중...");
+
+                var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "bcdedit.exe",
+                        Arguments = "/enum {current}",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    }
+                };
+                
+                process.Start();
+                var output = process.StandardOutput.ReadToEnd();
+                var error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+                
+                if (process.ExitCode == 0)
+                {
+                    if (output.Contains("hypervisorlaunchtype") && output.Contains("Off"))
+                    {
+                        items.Add(new VirtualizationInfoItem
+                        {
+                            Category = "hypervisorlaunchtype",
+                            Status = "✓ Off (비활성화)",
+                            Details = "부팅 시 하이퍼바이저가 로드되지 않아 가상화 소프트웨어 사용 가능",
+                            Recommendation = "현재 설정이 올바름 (비활성화 필요 없음)"
+                        });
+                    }
+                    else if (output.Contains("hypervisorlaunchtype") && output.Contains("Auto"))
+                    {
+                        items.Add(new VirtualizationInfoItem
+                        {
+                            Category = "hypervisorlaunchtype",
+                            Status = "✗ Auto (활성화)",
+                            Details = "부팅 시 하이퍼바이저가 자동으로 로드되어 가상화 성능에 영향",
+                            Recommendation = "비활성화 필요: 'VBS 및 Hyper-V 비활성화' 기능 사용 권장"
+                        });
+                    }
+                    else
+                    {
+                        items.Add(new VirtualizationInfoItem
+                        {
+                            Category = "hypervisorlaunchtype",
+                            Status = "? 설정되지 않음",
+                            Details = "Windows 기본 설정 (보통 Auto와 동일하게 작동)",
+                            Recommendation = "비활성화 권장: 'VBS 및 Hyper-V 비활성화' 기능 사용 권장"
+                        });
+                    }
+                }
+                else
+                {
+                    items.Add(new VirtualizationInfoItem
+                    {
+                        Category = "hypervisorlaunchtype",
+                        Status = "✗ 확인 실패",
+                        Details = $"bcdedit 명령 실행 실패 (Exit Code: {process.ExitCode})",
+                        Recommendation = "관리자 권한이 필요할 수 있습니다"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new VirtualizationInfoItem
+                {
+                    Category = "hypervisorlaunchtype",
+                    Status = "✗ 오류",
+                    Details = $"확인 실패: {ex.Message}",
+                    Recommendation = "관리자 권한으로 실행"
+                });
+            }
+        }
+
+        private void CheckVBSStatusDetailedToTable(ObservableCollection<VirtualizationInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("VBS 상태 및 레지스트리 확인 중...");
+
+                var vbsRegistryKeys = new[]
+                {
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 활성화"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", "HVCI 활성화"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 정책 활성화")
+                };
+
+                bool vbsEnabled = false;
+
+                foreach (var (keyPath, valueName, description) in vbsRegistryKeys)
+                {
+                    try
+                    {
+                        using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                        {
+                            if (key != null)
+                            {
+                                var value = key.GetValue(valueName);
+                                if (value != null)
+                                {
+                                    string valueStr = value.ToString();
+                                    string status = valueStr == "1" ? "✗ 활성화" : "✓ 비활성화";
+                                    string recommendation = valueStr == "1" ? "'VBS 및 Hyper-V 비활성화' 기능 사용 권장" : "현재 설정이 올바름";
+                                    
+                                    if (valueStr == "1" && (valueName.Contains("Enable") || valueName == "Enabled"))
+                                    {
+                                        vbsEnabled = true;
+                                    }
+                                    
+                                    items.Add(new VirtualizationInfoItem
+                                    {
+                                        Category = description,
+                                        Status = status,
+                                        Details = $"레지스트리 값: {valueStr} (경로: HKLM\\{keyPath})",
+                                        Recommendation = recommendation
+                                    });
+                                }
+                                else
+                                {
+                                    items.Add(new VirtualizationInfoItem
+                                    {
+                                        Category = description,
+                                        Status = "○ 설정되지 않음",
+                                        Details = $"레지스트리: HKLM\\{keyPath}\\{valueName}",
+                                        Recommendation = "기본값 사용 중"
+                                    });
+                                }
+                            }
+                            else
+                            {
+                                items.Add(new VirtualizationInfoItem
+                                {
+                                    Category = description,
+                                    Status = "○ 키 존재하지 않음",
+                                    Details = $"레지스트리: HKLM\\{keyPath}",
+                                    Recommendation = "기본값 사용 중"
+                                });
+                            }
+                        }
+                    }
+                    catch (Exception regEx)
+                    {
+                        items.Add(new VirtualizationInfoItem
+                        {
+                            Category = description,
+                            Status = "✗ 확인 실패",
+                            Details = $"오류: {regEx.Message}",
+                            Recommendation = "관리자 권한으로 재시도"
+                        });
+                    }
+                }
+
+                // 종합 상태
+                items.Add(new VirtualizationInfoItem
+                {
+                    Category = "VBS 종합 상태",
+                    Status = vbsEnabled ? "✗ VBS 활성화됨" : "✓ VBS 비활성화됨",
+                    Details = vbsEnabled ? "가상화 성능에 영향을 줍니다" : "가상화 성능에 영향을 주지 않습니다",
+                    Recommendation = vbsEnabled ? "'VBS 및 Hyper-V 비활성화' 기능 사용 권장" : "현재 설정이 올바름"
+                });
+            }
+            catch (Exception ex)
+            {
+                items.Add(new VirtualizationInfoItem
+                {
+                    Category = "VBS 상태",
+                    Status = "✗ 오류",
+                    Details = $"확인 실패: {ex.Message}",
+                    Recommendation = "관리자 권한으로 실행"
+                });
+            }
+        }
+
+        private void ExportSystemInfoButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var saveFileDialog = new SaveFileDialog
+                {
+                    Filter = "CSV 파일 (*.csv)|*.csv|텍스트 파일 (*.txt)|*.txt",
+                    DefaultExt = "csv",
+                    FileName = $"시스템정보_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+                };
+
+                if (saveFileDialog.ShowDialog() == true)
+                {
+                    var systemInfoItems = SystemInfoDataGrid.ItemsSource as ObservableCollection<SystemInfoItem>;
+                    if (systemInfoItems != null)
+                    {
+                        ExportToFile(systemInfoItems.ToList(), saveFileDialog.FileName, "시스템 상세 정보");
+                        MessageBox.Show($"시스템 정보를 성공적으로 내보냈습니다.\n파일: {saveFileDialog.FileName}", 
+                                      "내보내기 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"내보내기 중 오류가 발생했습니다: {ex.Message}", 
+                              "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ExportVirtualizationInfoButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var saveFileDialog = new SaveFileDialog
+                {
+                    Filter = "CSV 파일 (*.csv)|*.csv|텍스트 파일 (*.txt)|*.txt",
+                    DefaultExt = "csv",
+                    FileName = $"가상화설정_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"
+                };
+
+                if (saveFileDialog.ShowDialog() == true)
+                {
+                    var virtualizationInfoItems = VirtualizationDataGrid.ItemsSource as ObservableCollection<VirtualizationInfoItem>;
+                    if (virtualizationInfoItems != null)
+                    {
+                        ExportToFile(virtualizationInfoItems.ToList(), saveFileDialog.FileName, "가상화 설정 점검");
+                        MessageBox.Show($"가상화 설정 정보를 성공적으로 내보냈습니다.\n파일: {saveFileDialog.FileName}", 
+                                      "내보내기 완료", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"내보내기 중 오류가 발생했습니다: {ex.Message}", 
+                              "오류", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ExportToFile<T>(List<T> items, string filePath, string title)
+        {
+            var sb = new StringBuilder();
+            var extension = Path.GetExtension(filePath).ToLower();
+            
+            // 헤더 정보
+            sb.AppendLine($"# {title}");
+            sb.AppendLine($"# 생성일시: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"# VMFort Compatibility Tool v1.2.0");
+            sb.AppendLine("");
+
+            if (typeof(T) == typeof(SystemInfoItem))
+            {
+                // 시스템 정보 헤더
+                sb.AppendLine("항목,세부 정보,값");
+                
+                foreach (var item in items.Cast<SystemInfoItem>())
+                {
+                    // CSV 형식으로 쉼표로 구분, 쉼표가 포함된 내용은 따옴표로 감싸기
+                    var category = EscapeCsvField(item.Category ?? "");
+                    var itemName = EscapeCsvField(item.Item ?? "");
+                    var value = EscapeCsvField(item.Value ?? "");
+                    
+                    sb.AppendLine($"{category},{itemName},{value}");
+                }
+            }
+            else if (typeof(T) == typeof(VirtualizationInfoItem))
+            {
+                // 가상화 정보 헤더
+                sb.AppendLine("항목,상태,상세 정보,권장사항");
+                
+                foreach (var item in items.Cast<VirtualizationInfoItem>())
+                {
+                    var category = EscapeCsvField(item.Category ?? "");
+                    var status = EscapeCsvField(item.Status ?? "");
+                    var details = EscapeCsvField(item.Details ?? "");
+                    var recommendation = EscapeCsvField(item.Recommendation ?? "");
+                    
+                    sb.AppendLine($"{category},{status},{details},{recommendation}");
+                }
+            }
+
+            // UTF-8 BOM을 추가하여 한글 깨짐 방지
+            var encoding = new UTF8Encoding(true);
+            File.WriteAllText(filePath, sb.ToString(), encoding);
+        }
+
+        private string EscapeCsvField(string field)
+        {
+            if (string.IsNullOrEmpty(field))
+                return "";
+
+            // 쉼표, 줄바꿈, 따옴표가 포함된 경우 따옴표로 감싸고 내부 따옴표는 두 개로 변환
+            if (field.Contains(",") || field.Contains("\n") || field.Contains("\"") || field.Contains("\r"))
+            {
+                field = field.Replace("\"", "\"\"");
+                return $"\"{field}\"";
+            }
+            
+            return field;
         }
 
     }

@@ -7,8 +7,8 @@
     <AssemblyName>VMFort Compatibility Tool</AssemblyName>
     <AssemblyTitle>VMFort Compatibility Tool</AssemblyTitle>
     <AssemblyDescription>A tool for checking VMFort compatibility</AssemblyDescription>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.2.0.0</AssemblyVersion>
+    <FileVersion>1.2.0.0</FileVersion>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     
     <!-- 용량 최적화 설정 (WPF 호환) -->
@@ -22,6 +22,9 @@
     <EventSourceSupport>false</EventSourceSupport>
     <HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    
+    <!-- 관리자 권한 요구 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
