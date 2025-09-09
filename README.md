@@ -27,7 +27,7 @@ VMFort Compatibility Tool은 Windows 시스템에서 VMFort를 원활하게 사�
 
 ## 🖥️ 시스템 요구사항
 
-- **운영체제**: Windows 7 이상 (64비트)
+- **운영체제**: Windows 10 이상 (64비트)
 - **프레임워크**: .NET 8 Runtime (Self-contained 빌드의 경우 불필요)
 - **권한**: 시스템 정보 조회 및 Windows 기능 변경을 위한 관리자 권한
 
