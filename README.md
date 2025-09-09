@@ -66,6 +66,11 @@ dotnet publish VmCompatibilityTool.csproj -c Release
   - System.Management (WMI 정보 수집)
 - **Build**: Single-file self-contained executable
 
+## 🤖 개발 도구
 
+이 프로젝트는 **Claude Code**를 통해 제작되었습니다.
+- AI 지원 개발 환경에서 설계 및 구현
+- 코드 품질 및 안정성 최적화
+- 자동화된 오류 처리 및 예외 관리 시스템 구축
 
-**최종 업데이트**: 2025-09-08
+**최종 업데이트**: 2025-09-09

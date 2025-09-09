@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Reflection;
+using System.Security.Principal;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -21,6 +22,13 @@ namespace VmCompatibilityTool
         {
             try
             {
+                // 관리자 권한 확인
+                if (!IsRunAsAdministrator())
+                {
+                    ShowAdminRequiredDialog();
+                    return;
+                }
+
                 // 문화권 관련 초기화
                 InitializeCultureSettings();
                 
@@ -32,6 +40,69 @@ namespace VmCompatibilityTool
             catch (Exception ex)
             {
                 MessageBox.Show($"프로그램 초기화 중 오류 발생: {ex.Message}", "초기화 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private bool IsRunAsAdministrator()
+        {
+            try
+            {
+                var identity = WindowsIdentity.GetCurrent();
+                var principal = new WindowsPrincipal(identity);
+                return principal.IsInRole(WindowsBuiltInRole.Administrator);
+            }
+            catch (Exception ex)
+            {
+                // 권한 확인 실패 시 로그 남기고 false 반환 (안전한 기본값)
+                System.Diagnostics.Debug.WriteLine($"관리자 권한 확인 실패: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void ShowAdminRequiredDialog()
+        {
+            try
+            {
+                var result = MessageBox.Show(
+                    "이 프로그램은 시스템 정보 수집 및 Windows 기능 변경을 위해 관리자 권한이 필요합니다.\n\n" +
+                    "관리자 권한으로 다시 실행해 주세요.\n\n" +
+                    "프로그램을 종료하시겠습니까?",
+                    "관리자 권한 필요",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+                if (result == MessageBoxResult.Yes || result == MessageBoxResult.None)
+                {
+                    // 애플리케이션 종료
+                    Application.Current.Shutdown();
+                }
+                else
+                {
+                    // 사용자가 No를 선택한 경우에도 안전을 위해 종료
+                    // (관리자 권한 없이는 대부분의 기능이 정상 작동하지 않음)
+                    MessageBox.Show(
+                        "관리자 권한 없이는 프로그램이 정상적으로 작동하지 않을 수 있습니다.\n" +
+                        "프로그램을 종료합니다.",
+                        "알림",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    
+                    Application.Current.Shutdown();
+                }
+            }
+            catch (Exception ex)
+            {
+                // 다이얼로그 표시 실패 시에도 안전하게 종료
+                System.Diagnostics.Debug.WriteLine($"관리자 권한 다이얼로그 표시 실패: {ex.Message}");
+                try
+                {
+                    MessageBox.Show($"관리자 권한으로 실행해주세요.\n오류: {ex.Message}", "권한 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch
+                {
+                    // 최후 수단
+                }
+                Application.Current.Shutdown();
             }
         }
 
@@ -228,6 +299,7 @@ namespace VmCompatibilityTool
         {
             MenuPanel.Visibility = System.Windows.Visibility.Collapsed;
             SystemInfoPanel.Visibility = System.Windows.Visibility.Collapsed;
+            VirtualizationPanel.Visibility = System.Windows.Visibility.Collapsed;
             DisablePanel.Visibility = System.Windows.Visibility.Collapsed;
 
             switch (panelName)
@@ -237,6 +309,9 @@ namespace VmCompatibilityTool
                     break;
                 case "SystemInfo":
                     SystemInfoPanel.Visibility = System.Windows.Visibility.Visible;
+                    break;
+                case "Virtualization":
+                    VirtualizationPanel.Visibility = System.Windows.Visibility.Visible;
                     break;
                 case "Disable":
                     DisablePanel.Visibility = System.Windows.Visibility.Visible;
@@ -248,6 +323,12 @@ namespace VmCompatibilityTool
         {
             ShowPanel("SystemInfo");
             LoadDetailedSystemInfo();
+        }
+
+        private void VirtualizationCheckButton_Click(object sender, RoutedEventArgs e)
+        {
+            ShowPanel("Virtualization");
+            LoadVirtualizationInfo();
         }
 
         private void DisableVbsHyperVButton_Click(object sender, RoutedEventArgs e)
@@ -326,7 +407,6 @@ namespace VmCompatibilityTool
                 CollectCPUInfo(result);
                 CollectMemoryInfo(result);
                 CollectDiskInfo(result);
-                CollectVirtualizationInfo(result);
                 CollectBootInfo(result);
 
                 // UI 업데이트를 더 안전하게 처리
@@ -1827,6 +1907,484 @@ namespace VmCompatibilityTool
             return false;
         }
 
+        private async void LoadVirtualizationInfo()
+        {
+            try
+            {
+                // UI 초기화
+                VirtualizationInfoTextBox.Text = "가상화 설정 정보를 수집하고 있습니다...\n";
+                StatusTextBlock.Text = "가상화 설정 수집 중...";
+                
+                // 가상화 점검 버튼 비활성화
+                VirtualizationCheckButton.IsEnabled = false;
+
+                // CancellationToken을 사용하여 작업 취소 가능하게 함
+                using (var cts = new System.Threading.CancellationTokenSource())
+                {
+                    // 30초 타임아웃 설정
+                    cts.CancelAfter(TimeSpan.FromSeconds(30));
+
+                    // 백그라운드에서 가상화 정보 수집
+                    await Task.Run(() => CollectVirtualizationSettings(), cts.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    VirtualizationInfoTextBox.Text = "가상화 설정 수집이 시간 초과로 인해 중단되었습니다.\n" +
+                                                   "일부 정보만 표시될 수 있습니다.";
+                    StatusTextBlock.Text = "가상화 설정 수집 시간 초과";
+                });
+            }
+            catch (Exception ex)
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    VirtualizationInfoTextBox.Text = $"가상화 설정 수집 중 오류가 발생했습니다: {ex.Message}\n\n" +
+                                                   "관리자 권한으로 프로그램을 실행하거나 잠시 후 다시 시도해 보세요.";
+                    StatusTextBlock.Text = "가상화 설정 수집 실패";
+                });
+            }
+            finally
+            {
+                // UI 복원
+                Dispatcher.Invoke(() =>
+                {
+                    VirtualizationCheckButton.IsEnabled = true;
+                    if (StatusTextBlock.Text.Contains("중") || StatusTextBlock.Text.Contains("수집"))
+                    {
+                        StatusTextBlock.Text = "가상화 설정 수집 완료";
+                    }
+                });
+            }
+        }
+
+        private void CollectVirtualizationSettings()
+        {
+            var result = new StringBuilder();
+            result.AppendLine("=== 가상화 설정 점검 ===");
+            result.AppendLine();
+
+            try
+            {
+                // 1. 하드웨어 가상화 지원 확인
+                CheckHardwareVirtualization(result);
+                
+                // 2. WSL 설치 상태 확인
+                CheckWSLInstallation(result);
+                
+                // 3. Hyper-V 설치 상태 확인
+                CheckHyperVInstallationDetailed(result);
+                
+                // 4. bcdedit hypervisorlaunchtype 확인
+                CheckHypervisorLaunchType(result);
+                
+                // 5. VBS 상태 및 레지스트리 정보 확인
+                CheckVBSStatusDetailed(result);
+
+                // UI 업데이트를 더 안전하게 처리
+                SafeUpdateVirtualizationUI(result.ToString(), "가상화 설정 수집 완료");
+            }
+            catch (Exception ex)
+            {
+                // 예외 발생 시에도 안전하게 UI 업데이트
+                var errorMessage = $"심각한 오류 발생: {ex.Message}\n\n스택 추적:\n{ex.StackTrace}\n\n수집된 정보:\n{result.ToString()}";
+                SafeUpdateVirtualizationUI(errorMessage, "가상화 설정 수집 실패");
+            }
+        }
+
+        private void SafeUpdateVirtualizationUI(string content, string status)
+        {
+            try
+            {
+                if (Dispatcher.CheckAccess())
+                {
+                    UpdateVirtualizationUIContent(content, status);
+                }
+                else
+                {
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        try
+                        {
+                            UpdateVirtualizationUIContent(content, status);
+                        }
+                        catch (Exception uiEx)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"가상화 UI 업데이트 실패: {uiEx.Message}");
+                        }
+                    });
+                }
+            }
+            catch (Exception dispatcherEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"가상화 Dispatcher 오류: {dispatcherEx.Message}");
+            }
+        }
+
+        private void UpdateVirtualizationUIContent(string content, string status)
+        {
+            try
+            {
+                if (VirtualizationInfoTextBox != null)
+                {
+                    SafeSetTextBoxContent(VirtualizationInfoTextBox, content ?? "정보를 가져올 수 없습니다.");
+                }
+                
+                if (StatusTextBlock != null)
+                {
+                    StatusTextBlock.Text = status ?? "상태 불명";
+                }
+            }
+            catch (Exception updateEx)
+            {
+                System.Diagnostics.Debug.WriteLine($"가상화 UI 컨트롤 업데이트 오류: {updateEx.Message}");
+                throw;
+            }
+        }
+
+        private void CheckHardwareVirtualization(StringBuilder result)
+        {
+            try
+            {
+                result.AppendLine("[1. 하드웨어 가상화 지원]");
+                UpdateProgress("하드웨어 가상화 지원 확인 중...");
+                
+                using (var searcher = new ManagementObjectSearcher("SELECT VirtualizationFirmwareEnabled FROM Win32_Processor"))
+                {
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        var isEnabled = obj["VirtualizationFirmwareEnabled"];
+                        if (isEnabled != null && (bool)isEnabled)
+                        {
+                            result.AppendLine("✓ 하드웨어 가상화: 지원됨 및 활성화됨");
+                            result.AppendLine("  → CPU에서 가상화 기술을 지원하며 BIOS/UEFI에서 활성화되어 있습니다.");
+                        }
+                        else
+                        {
+                            result.AppendLine("✗ 하드웨어 가상화: 비활성화됨 또는 지원되지 않음");
+                            result.AppendLine("  → BIOS/UEFI 설정에서 Intel VT-x 또는 AMD-V를 활성화하세요.");
+                        }
+                        break;
+                    }
+                }
+                result.AppendLine();
+            }
+            catch (Exception ex)
+            {
+                result.AppendLine($"✗ 하드웨어 가상화 확인 실패: {ex.Message}");
+                result.AppendLine();
+            }
+        }
+
+        private void CheckWSLInstallation(StringBuilder result)
+        {
+            try
+            {
+                result.AppendLine("[2. WSL (Windows Subsystem for Linux) 설치 상태]");
+                UpdateProgress("WSL 설치 상태 확인 중...");
+
+                var wslFeatures = new[]
+                {
+                    ("Microsoft-Windows-Subsystem-Linux", "WSL 1"),
+                    ("VirtualMachinePlatform", "가상 머신 플랫폼 (WSL 2)")
+                };
+
+                bool anyWSLInstalled = false;
+
+                foreach (var (featureName, displayName) in wslFeatures)
+                {
+                    try
+                    {
+                        var process = new Process
+                        {
+                            StartInfo = new ProcessStartInfo
+                            {
+                                FileName = "dism.exe",
+                                Arguments = $"/online /get-featureinfo /featurename:{featureName}",
+                                UseShellExecute = false,
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                CreateNoWindow = true
+                            }
+                        };
+                        
+                        process.Start();
+                        var output = process.StandardOutput.ReadToEnd();
+                        process.WaitForExit();
+                        
+                        if (output.Contains("State : Enabled"))
+                        {
+                            result.AppendLine($"✓ {displayName}: 설치됨 (활성화)");
+                            anyWSLInstalled = true;
+                        }
+                        else if (output.Contains("State : Disabled"))
+                        {
+                            result.AppendLine($"○ {displayName}: 설치됨 (비활성화)");
+                        }
+                        else
+                        {
+                            result.AppendLine($"○ {displayName}: 설치되지 않음");
+                        }
+                    }
+                    catch
+                    {
+                        result.AppendLine($"? {displayName}: 확인 불가");
+                    }
+                }
+
+                if (anyWSLInstalled)
+                {
+                    result.AppendLine("  → WSL이 설치되어 있어 가상화 성능에 영향을 줄 수 있습니다.");
+                }
+                else
+                {
+                    result.AppendLine("  → WSL이 설치되지 않아 가상화 성능에 영향을 주지 않습니다.");
+                }
+
+                result.AppendLine();
+            }
+            catch (Exception ex)
+            {
+                result.AppendLine($"✗ WSL 설치 상태 확인 실패: {ex.Message}");
+                result.AppendLine();
+            }
+        }
+
+        private void CheckHyperVInstallationDetailed(StringBuilder result)
+        {
+            try
+            {
+                result.AppendLine("[3. Hyper-V 설치 상태]");
+                UpdateProgress("Hyper-V 설치 상태 확인 중...");
+
+                var hyperVFeatures = new[]
+                {
+                    ("Microsoft-Hyper-V-All", "Hyper-V (전체)"),
+                    ("Microsoft-Hyper-V", "Hyper-V 플랫폼"),
+                    ("Microsoft-Hyper-V-Hypervisor", "Hyper-V 하이퍼바이저"),
+                    ("Microsoft-Hyper-V-Services", "Hyper-V 서비스"),
+                    ("Microsoft-Hyper-V-Management-Clients", "Hyper-V 관리 도구")
+                };
+
+                bool anyHyperVInstalled = false;
+
+                foreach (var (featureName, displayName) in hyperVFeatures)
+                {
+                    try
+                    {
+                        var process = new Process
+                        {
+                            StartInfo = new ProcessStartInfo
+                            {
+                                FileName = "dism.exe",
+                                Arguments = $"/online /get-featureinfo /featurename:{featureName}",
+                                UseShellExecute = false,
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                CreateNoWindow = true
+                            }
+                        };
+                        
+                        process.Start();
+                        var output = process.StandardOutput.ReadToEnd();
+                        process.WaitForExit();
+                        
+                        if (output.Contains("State : Enabled"))
+                        {
+                            result.AppendLine($"✓ {displayName}: 설치됨 (활성화)");
+                            anyHyperVInstalled = true;
+                        }
+                        else if (output.Contains("State : Disabled"))
+                        {
+                            result.AppendLine($"○ {displayName}: 설치됨 (비활성화)");
+                        }
+                        else
+                        {
+                            result.AppendLine($"○ {displayName}: 설치되지 않음");
+                        }
+                    }
+                    catch
+                    {
+                        result.AppendLine($"? {displayName}: 확인 불가");
+                    }
+                }
+
+                if (anyHyperVInstalled)
+                {
+                    result.AppendLine("  → Hyper-V가 설치되어 있어 다른 가상화 소프트웨어와 충돌할 수 있습니다.");
+                }
+                else
+                {
+                    result.AppendLine("  → Hyper-V가 설치되지 않아 다른 가상화 소프트웨어를 사용할 수 있습니다.");
+                }
+
+                result.AppendLine();
+            }
+            catch (Exception ex)
+            {
+                result.AppendLine($"✗ Hyper-V 설치 상태 확인 실패: {ex.Message}");
+                result.AppendLine();
+            }
+        }
+
+        private void CheckHypervisorLaunchType(StringBuilder result)
+        {
+            try
+            {
+                result.AppendLine("[4. 하이퍼바이저 시작 유형 (bcdedit)]");
+                UpdateProgress("하이퍼바이저 시작 유형 확인 중...");
+
+                var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "bcdedit.exe",
+                        Arguments = "/enum {current}",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    }
+                };
+                
+                process.Start();
+                var output = process.StandardOutput.ReadToEnd();
+                var error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+                
+                if (process.ExitCode == 0)
+                {
+                    if (output.Contains("hypervisorlaunchtype") && output.Contains("Off"))
+                    {
+                        result.AppendLine("✓ hypervisorlaunchtype: Off (비활성화 상태)");
+                        result.AppendLine("  → 부팅 시 하이퍼바이저가 로드되지 않아 가상화 소프트웨어 사용 가능");
+                        result.AppendLine("  → 현재 설정이 올바름 (비활성화 필요 없음)");
+                    }
+                    else if (output.Contains("hypervisorlaunchtype") && output.Contains("Auto"))
+                    {
+                        result.AppendLine("✗ hypervisorlaunchtype: Auto (활성화 상태)");
+                        result.AppendLine("  → 부팅 시 하이퍼바이저가 자동으로 로드되어 가상화 성능에 영향");
+                        result.AppendLine("  → 비활성화 필요: 'VBS 및 Hyper-V 비활성화' 기능을 사용하여 Off로 변경 권장");
+                    }
+                    else
+                    {
+                        result.AppendLine("? hypervisorlaunchtype: 설정되지 않음 (기본값)");
+                        result.AppendLine("  → Windows 기본 설정 (보통 Auto와 동일하게 작동)");
+                        result.AppendLine("  → 비활성화 권장: 'VBS 및 Hyper-V 비활성화' 기능을 사용하여 Off로 설정 권장");
+                    }
+                }
+                else
+                {
+                    result.AppendLine($"✗ bcdedit 명령 실행 실패 (Exit Code: {process.ExitCode})");
+                    if (!string.IsNullOrEmpty(error))
+                    {
+                        result.AppendLine($"  오류: {error.Trim()}");
+                    }
+                    result.AppendLine("  → 관리자 권한이 필요할 수 있습니다.");
+                }
+
+                result.AppendLine();
+            }
+            catch (Exception ex)
+            {
+                result.AppendLine($"✗ 하이퍼바이저 시작 유형 확인 실패: {ex.Message}");
+                result.AppendLine();
+            }
+        }
+
+        private void CheckVBSStatusDetailed(StringBuilder result)
+        {
+            try
+            {
+                result.AppendLine("[5. VBS (가상화 기반 보안) 상태 및 레지스트리 정보]");
+                UpdateProgress("VBS 상태 및 레지스트리 확인 중...");
+
+                var vbsRegistryKeys = new[]
+                {
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 활성화"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequirePlatformSecurityFeatures", "플랫폼 보안 기능 요구"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", "HVCI 활성화"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "WasEnabledBy", "HVCI 활성화 주체"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", "시스템 가드 활성화"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 정책 활성화"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HypervisorEnforcedCodeIntegrity", "HVCI 정책"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIMATRequired", "HVCI MAT 필요")
+                };
+
+                bool vbsEnabled = false;
+
+                foreach (var (keyPath, valueName, description) in vbsRegistryKeys)
+                {
+                    try
+                    {
+                        using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                        {
+                            if (key != null)
+                            {
+                                var value = key.GetValue(valueName);
+                                if (value != null)
+                                {
+                                    string valueStr = value.ToString();
+                                    string status = valueStr == "1" ? "활성화" : "비활성화";
+                                    string symbol = valueStr == "1" ? "✗" : "✓";
+                                    
+                                    if (valueStr == "1" && (valueName.Contains("Enable") || valueName == "Enabled"))
+                                    {
+                                        vbsEnabled = true;
+                                    }
+                                    
+                                    result.AppendLine($"{symbol} {description}: {status} (값: {valueStr})");
+                                    result.AppendLine($"  레지스트리: HKLM\\{keyPath}");
+                                    result.AppendLine($"  값 이름: {valueName}");
+                                    result.AppendLine();
+                                }
+                                else
+                                {
+                                    result.AppendLine($"○ {description}: 설정되지 않음");
+                                    result.AppendLine($"  레지스트리: HKLM\\{keyPath}");
+                                    result.AppendLine($"  값 이름: {valueName}");
+                                    result.AppendLine();
+                                }
+                            }
+                            else
+                            {
+                                result.AppendLine($"○ {description}: 키가 존재하지 않음");
+                                result.AppendLine($"  레지스트리: HKLM\\{keyPath}");
+                                result.AppendLine();
+                            }
+                        }
+                    }
+                    catch (Exception regEx)
+                    {
+                        result.AppendLine($"✗ {description}: 확인 실패 ({regEx.Message})");
+                        result.AppendLine($"  레지스트리: HKLM\\{keyPath}");
+                        result.AppendLine();
+                    }
+                }
+
+                // 종합 상태
+                result.AppendLine("[VBS 종합 상태]");
+                if (vbsEnabled)
+                {
+                    result.AppendLine("✗ VBS가 활성화되어 있어 가상화 성능에 영향을 줍니다.");
+                    result.AppendLine("  → 'VBS 및 Hyper-V 비활성화' 기능을 사용하여 비활성화할 수 있습니다.");
+                }
+                else
+                {
+                    result.AppendLine("✓ VBS가 비활성화되어 있어 가상화 성능에 영향을 주지 않습니다.");
+                }
+
+                result.AppendLine();
+            }
+            catch (Exception ex)
+            {
+                result.AppendLine($"✗ VBS 상태 확인 실패: {ex.Message}");
+                result.AppendLine();
+            }
+        }
+
         private async void ExecuteDisableButton_Click(object sender, RoutedEventArgs e)
         {
             var result = MessageBox.Show(
@@ -1945,6 +2503,49 @@ namespace VmCompatibilityTool
                     {
                         result.AppendLine($"   ✗ {feature} 비활성화 실패");
                     }
+                }
+
+                // bcdedit를 사용하여 하이퍼바이저 시작 유형 비활성화 (완전한 Hyper-V 비활성화)
+                result.AppendLine();
+                result.AppendLine("   하이퍼바이저 시작 유형 비활성화 중...");
+                try
+                {
+                    var bcdProcess = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = "bcdedit.exe",
+                            Arguments = "/set hypervisorlaunchtype off",
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true,
+                            CreateNoWindow = true
+                        }
+                    };
+                    
+                    bcdProcess.Start();
+                    var output = bcdProcess.StandardOutput.ReadToEnd();
+                    var error = bcdProcess.StandardError.ReadToEnd();
+                    bcdProcess.WaitForExit();
+                    
+                    if (bcdProcess.ExitCode == 0)
+                    {
+                        result.AppendLine("   ✓ 하이퍼바이저 시작 유형 비활성화 성공");
+                        result.AppendLine("   → 부팅 시 하이퍼바이저가 로드되지 않습니다");
+                    }
+                    else
+                    {
+                        result.AppendLine($"   ✗ 하이퍼바이저 시작 유형 비활성화 실패 (Exit Code: {bcdProcess.ExitCode})");
+                        if (!string.IsNullOrEmpty(error))
+                        {
+                            result.AppendLine($"   오류: {error.Trim()}");
+                        }
+                    }
+                }
+                catch (Exception bcdEx)
+                {
+                    result.AppendLine($"   ✗ bcdedit 명령 실행 실패: {bcdEx.Message}");
+                    result.AppendLine("   → 관리자 권한이 필요할 수 있습니다");
                 }
                 
                 return result.ToString();
