@@ -1,10 +1,10 @@
-# VMFort Compatibility Tool
+# VM Compatibility Tool
 
-VMFort 사용을 위한 시스템 최적화 도구
+VM 사용을 위한 시스템 최적화 도구
 
 ## 📋 프로젝트 개요
 
-VMFort Compatibility Tool은 Windows 시스템에서 VMFort를 원활하게 사용하기 위해 필요한 시스템 정보 확인 및 최적화 작업을 자동화하는 WPF 애플리케이션입니다.
+VM Compatibility Tool은 Windows 시스템에서 VM을 원활하게 사용하기 위해 필요한 시스템 정보 확인 및 최적화 작업을 자동화하는 WPF 애플리케이션입니다.
 
 ## 🎯 주요 기능
 
@@ -34,7 +34,7 @@ VMFort Compatibility Tool은 Windows 시스템에서 VMFort를 원활하게 사�
 ## 🚀 사용법
 
 ### 실행파일 다운로드
-1. 릴리즈 페이지에서 `VMFort Compatibility Tool.exe` 다운로드
+1. 릴리즈 페이지에서 `VM Compatibility Tool.exe` 다운로드
 2. 관리자 권한으로 실행
 
 ### 소스코드에서 빌드

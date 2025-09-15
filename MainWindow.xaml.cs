@@ -254,7 +254,7 @@ namespace VmCompatibilityTool
                 }
 
                 var timestamp = DateTime.Now.ToString("yyyy-MM-dd");
-                var logFileName = $"VMFort_Error_{category}_{timestamp}.log";
+                var logFileName = $"VM_Error_{category}_{timestamp}.log";
                 var logPath = System.IO.Path.Combine(logDir, logFileName);
 
                 var separator = new string('=', 80);
@@ -2772,7 +2772,7 @@ namespace VmCompatibilityTool
                         StartInfo = new ProcessStartInfo
                         {
                             FileName = "shutdown.exe",
-                            Arguments = "/r /t 5 /c \"VMFort Compatibility Tool에 의한 시스템 재부팅\"",
+                            Arguments = "/r /t 5 /c \"VM Compatibility Tool에 의한 시스템 재부팅\"",
                             UseShellExecute = false,
                             CreateNoWindow = true
                         }
@@ -3517,7 +3517,7 @@ namespace VmCompatibilityTool
             // 헤더 정보
             sb.AppendLine($"# {title}");
             sb.AppendLine($"# 생성일시: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-            sb.AppendLine($"# VMFort Compatibility Tool v1.2.0");
+            sb.AppendLine($"# VM Compatibility Tool v1.2.0");
             sb.AppendLine("");
 
             if (typeof(T) == typeof(SystemInfoItem))
