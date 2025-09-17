@@ -38,16 +38,37 @@ VM Compatibility Tool은 Windows 시스템에서 VM을 원활하게 사용하기
 2. 관리자 권한으로 실행
 
 ### 소스코드에서 빌드
+
+#### 자동 빌드 스크립트 사용 (권장)
 ```bash
 # 프로젝트 클론
 git clone https://github.com/HelloJamong/vm-compatibility-tool.git
 cd vm-compatibility-tool
 
+# 옵션 1: 대화형 빌드 (버전 업데이트 + 파일명 설정 가능)
+build.bat
+
+# 옵션 2: 빠른 빌드 (현재 버전, 기본 파일명)
+quick-build.bat
+```
+
+**빌드 스크립트 기능:**
+- `build.bat`: 버전 자동 업데이트, 출력 파일명 설정, 대화형 인터페이스
+  - 현재 버전으로 빌드 또는 새 버전으로 업데이트 후 빌드 선택 가능
+  - 출력 파일명 커스터마이징 (예: `MyTool`, `VM-Tool-v2` 등)
+  - 빌드 완료 후 release 폴더 복사 및 탐색기 열기 옵션
+  - VmCompatibilityTool.csproj와 MainWindow.xaml.cs의 버전 정보 자동 동기화
+- `quick-build.bat`: 설정 없이 빠른 빌드, release 폴더에 자동 복사
+  - 현재 버전 유지, 기본 파일명(`VM Compatibility Tool.exe`) 사용
+  - 3초 후 자동 종료로 빠른 개발 워크플로우 지원
+
+#### 수동 빌드
+```bash
 # 개발용 실행
 dotnet run --project VmCompatibilityTool.csproj
 
 # 배포용 빌드 (단일 실행파일)
-dotnet publish VmCompatibilityTool.csproj -c Release
+dotnet publish VmCompatibilityTool.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 ```
 
 ## ⚠️ 주의사항
@@ -73,4 +94,4 @@ dotnet publish VmCompatibilityTool.csproj -c Release
 - 코드 품질 및 안정성 최적화
 - 자동화된 오류 처리 및 예외 관리 시스템 구축
 
-**최종 업데이트**: 2025-09-09
+**최종 업데이트**: 2025-09-17

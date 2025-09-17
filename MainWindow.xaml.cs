@@ -34,6 +34,8 @@ namespace VmCompatibilityTool
 
     public partial class MainWindow : Window
     {
+        private bool isVirtualizationCheckCompleted = false;
+        private ObservableCollection<VirtualizationInfoItem> lastVirtualizationCheckResult = null;
 
         public MainWindow()
         {
@@ -308,7 +310,7 @@ namespace VmCompatibilityTool
             }
             catch
             {
-                VersionTextBlock.Text = "v1.0.0";
+                VersionTextBlock.Text = "v1.2.1";
             }
         }
 
@@ -2450,8 +2452,36 @@ namespace VmCompatibilityTool
 
         private async void ExecuteDisableButton_Click(object sender, RoutedEventArgs e)
         {
+            // 가상화 설정 점검 상태 확인
+            if (!isVirtualizationCheckCompleted || lastVirtualizationCheckResult == null)
+            {
+                var checkResult = MessageBox.Show(
+                    "가상화 설정 점검을 진행하지 않은 상태로 조치를 진행할 경우 모든 점검 항목이 수정됩니다.\n\n" +
+                    "그래도 진행하시겠습니까?",
+                    "가상화 설정 점검 필요",
+                    MessageBoxButton.YesNoCancel,
+                    MessageBoxImage.Question);
+
+                if (checkResult == MessageBoxResult.No)
+                {
+                    MessageBox.Show(
+                        "가상화 설정 점검을 먼저 실행해 주세요.\n\n" +
+                        "'가상화 설정' 탭에서 점검을 진행한 후 다시 시도하세요.",
+                        "점검 필요",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+                else if (checkResult == MessageBoxResult.Cancel)
+                {
+                    return;
+                }
+                // Yes인 경우 계속 진행
+            }
+
             var result = MessageBox.Show(
-                "이 작업은 시스템의 보안 기능을 비활성화하며, 완료 후 재부팅이 필요합니다.\n\n" +
+                "조치 완료 후 PC 재부팅이 필요할 수 있습니다.\n" +
+                "PC 재부팅 필요 시 진행 여부를 확인할 수 있는 팝업을 제공합니다.\n\n" +
                 "계속하시겠습니까?",
                 "경고",
                 MessageBoxButton.YesNo,
@@ -2479,6 +2509,28 @@ namespace VmCompatibilityTool
         {
             var result = new StringBuilder();
             result.AppendLine("=== VBS 및 Hyper-V 비활성화 작업 ===");
+
+            // 가상화 설정 점검 결과가 있으면 필요한 항목만 조치
+            if (isVirtualizationCheckCompleted && lastVirtualizationCheckResult != null)
+            {
+                result.AppendLine("가상화 설정 점검 결과를 기반으로 필요한 항목만 조치합니다.");
+                DisableVbsAndHyperVSelective(result);
+            }
+            else
+            {
+                result.AppendLine("모든 항목에 대해 조치를 진행합니다.");
+                DisableVbsAndHyperVComplete(result);
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                DisableResultTextBox.Text = result.ToString();
+                ShowRebootDialog();
+            });
+        }
+
+        private void DisableVbsAndHyperVComplete(StringBuilder result)
+        {
             result.AppendLine();
 
             // 1. Hyper-V 기능 비활성화
@@ -2507,12 +2559,217 @@ namespace VmCompatibilityTool
 
             result.AppendLine("모든 비활성화 작업이 완료되었습니다.");
             result.AppendLine("변경사항을 적용하려면 시스템을 재부팅해야 합니다.");
+        }
 
-            Dispatcher.Invoke(() =>
+        private void DisableVbsAndHyperVSelective(StringBuilder result)
+        {
+            result.AppendLine();
+
+            var actionCount = 0;
+
+            // 점검 결과 분석
+            var needsHyperVDisable = CheckIfHyperVNeedsDisabling();
+            var needsWSLDisable = CheckIfWSLNeedsDisabling();
+            var needsVBSDisable = CheckIfVBSNeedsDisabling();
+            var needsCoreIsolationDisable = CheckIfCoreIsolationNeedsDisabling();
+
+            // 1. Hyper-V 기능 확인 및 비활성화
+            if (needsHyperVDisable)
             {
-                DisableResultTextBox.Text = result.ToString();
-                ShowRebootDialog();
-            });
+                actionCount++;
+                result.AppendLine($"{actionCount}. Hyper-V 기능 비활성화 중...");
+                var hyperVResult = DisableHyperVFeatures();
+                result.AppendLine(hyperVResult);
+                result.AppendLine();
+            }
+            else
+            {
+                result.AppendLine("✓ Hyper-V 기능: 이미 비활성화되어 있음");
+                result.AppendLine();
+            }
+
+            // 2. WSL2 확인 및 비활성화
+            if (needsWSLDisable)
+            {
+                actionCount++;
+                result.AppendLine($"{actionCount}. WSL2 비활성화 중...");
+                var wslResult = DisableWSL2();
+                result.AppendLine(wslResult);
+                result.AppendLine();
+            }
+            else
+            {
+                result.AppendLine("✓ WSL2: 이미 비활성화되어 있음");
+                result.AppendLine();
+            }
+
+            // 3. VBS 확인 및 비활성화
+            if (needsVBSDisable)
+            {
+                actionCount++;
+                result.AppendLine($"{actionCount}. VBS (가상화 기반 보안) 비활성화 중...");
+                var vbsResult = DisableVBSSelective();
+                result.AppendLine(vbsResult);
+                result.AppendLine();
+            }
+            else
+            {
+                result.AppendLine("✓ VBS (가상화 기반 보안): 이미 비활성화되어 있음");
+                result.AppendLine();
+            }
+
+            // 4. 코어 격리 확인 및 비활성화
+            if (needsCoreIsolationDisable)
+            {
+                actionCount++;
+                result.AppendLine($"{actionCount}. 코어 격리 비활성화 중...");
+                var coreIsolationResult = DisableCoreIsolation();
+                result.AppendLine(coreIsolationResult);
+                result.AppendLine();
+            }
+            else
+            {
+                result.AppendLine("✓ 코어 격리: 이미 비활성화되어 있음");
+                result.AppendLine();
+            }
+
+            if (actionCount > 0)
+            {
+                result.AppendLine($"총 {actionCount}개 항목의 비활성화 작업이 완료되었습니다.");
+                result.AppendLine("변경사항을 적용하려면 시스템을 재부팅해야 합니다.");
+            }
+            else
+            {
+                result.AppendLine("모든 항목이 이미 최적화되어 있습니다. 추가 조치가 필요하지 않습니다.");
+            }
+        }
+
+        private bool CheckIfHyperVNeedsDisabling()
+        {
+            if (lastVirtualizationCheckResult == null) return true;
+
+            foreach (var item in lastVirtualizationCheckResult)
+            {
+                if (item.Category.Contains("Hyper-V") && item.Status.Contains("활성화"))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool CheckIfWSLNeedsDisabling()
+        {
+            if (lastVirtualizationCheckResult == null) return true;
+
+            foreach (var item in lastVirtualizationCheckResult)
+            {
+                if ((item.Category.Contains("WSL") || item.Category.Contains("Virtual Machine Platform")) &&
+                    item.Status.Contains("활성화"))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool CheckIfVBSNeedsDisabling()
+        {
+            if (lastVirtualizationCheckResult == null) return true;
+
+            foreach (var item in lastVirtualizationCheckResult)
+            {
+                if ((item.Category.Contains("VBS") || item.Category.Contains("HVCI") ||
+                     item.Category.Contains("Credential Guard") || item.Category.Contains("Key Guard") ||
+                     item.Category.Contains("시스템 가드") || item.Category.Contains("보안 생체") ||
+                     item.Category.Contains("LSA")) && item.Status.Contains("활성화"))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool CheckIfCoreIsolationNeedsDisabling()
+        {
+            if (lastVirtualizationCheckResult == null) return true;
+
+            foreach (var item in lastVirtualizationCheckResult)
+            {
+                if ((item.Category.Contains("정책") || item.Category.Contains("MAT") ||
+                     item.Category.Contains("취약한 드라이버")) && item.Status.Contains("활성화"))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private string DisableVBSSelective()
+        {
+            try
+            {
+                var result = new StringBuilder();
+
+                // 점검 결과에서 활성화된 VBS 관련 항목만 비활성화
+                var vbsKeysToDisable = new List<(string keyPath, string valueName, string description)>();
+
+                if (lastVirtualizationCheckResult != null)
+                {
+                    foreach (var item in lastVirtualizationCheckResult)
+                    {
+                        if (item.Status.Contains("활성화") && item.Details.Contains("레지스트리"))
+                        {
+                            // 레지스트리 경로에서 키 정보 추출
+                            var details = item.Details;
+                            if (details.Contains("HKLM\\"))
+                            {
+                                var regPath = details.Substring(details.IndexOf("HKLM\\") + 5);
+                                if (regPath.Contains("\\"))
+                                {
+                                    var pathParts = regPath.Split('\\');
+                                    if (pathParts.Length >= 2)
+                                    {
+                                        var keyPath = string.Join("\\", pathParts.Take(pathParts.Length - 1));
+                                        var valueName = pathParts.Last();
+                                        vbsKeysToDisable.Add((keyPath, valueName, item.Category));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 감지된 항목들만 비활성화
+                if (vbsKeysToDisable.Any())
+                {
+                    foreach (var (keyPath, valueName, description) in vbsKeysToDisable)
+                    {
+                        try
+                        {
+                            using (var key = Registry.LocalMachine.CreateSubKey(keyPath))
+                            {
+                                key?.SetValue(valueName, 0, RegistryValueKind.DWord);
+                                result.AppendLine($"   ✓ {description}: {keyPath}\\{valueName} = 0 설정 완료");
+                            }
+                        }
+                        catch
+                        {
+                            result.AppendLine($"   ✗ {description}: {keyPath}\\{valueName} 설정 실패");
+                        }
+                    }
+                }
+                else
+                {
+                    result.AppendLine("   점검 결과 비활성화가 필요한 VBS 항목이 없습니다.");
+                }
+
+                return result.ToString();
+            }
+            catch (Exception ex)
+            {
+                return $"   ✗ VBS 선택적 비활성화 중 오류 발생: {ex.Message}";
+            }
         }
 
         private string DisableHyperVFeatures()
@@ -2687,7 +2944,16 @@ namespace VmCompatibilityTool
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequirePlatformSecurityFeatures", 0),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", 0),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "WasEnabledBy", 0),
-                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", 0)
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyAvailable", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyPersistent", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "IsSecureKernelRunning", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "KeyGuardEnabled", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "SecretsMode", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SecureBiometrics", "Enabled", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlags", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlagsDefault", 0)
                 };
 
                 foreach (var (keyPath, valueName, value) in vbsKeys)
@@ -2801,6 +3067,13 @@ namespace VmCompatibilityTool
                 {
                     VirtualizationDataGrid.ItemsSource = items;
                     StatusTextBlock.Text = status;
+
+                    // 가상화 설정 점검 완료 상태 업데이트
+                    if (status.Contains("완료") && items != null && items.Count > 0)
+                    {
+                        isVirtualizationCheckCompleted = true;
+                        lastVirtualizationCheckResult = items;
+                    }
                 }
                 else
                 {
@@ -2810,6 +3083,13 @@ namespace VmCompatibilityTool
                         {
                             VirtualizationDataGrid.ItemsSource = items;
                             StatusTextBlock.Text = status;
+
+                            // 가상화 설정 점검 완료 상태 업데이트
+                            if (status.Contains("완료") && items != null && items.Count > 0)
+                            {
+                                isVirtualizationCheckCompleted = true;
+                                lastVirtualizationCheckResult = items;
+                            }
                         }
                         catch (Exception uiEx)
                         {
@@ -3361,8 +3641,23 @@ namespace VmCompatibilityTool
                 var vbsRegistryKeys = new[]
                 {
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 활성화"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequirePlatformSecurityFeatures", "플랫폼 보안 기능 요구"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", "HVCI 활성화"),
-                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 정책 활성화")
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "WasEnabledBy", "HVCI 활성화 주체"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", "시스템 가드 활성화"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled", "Credential Guard 활성화"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyAvailable", "암호화 키 사용 가능"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyPersistent", "암호화 키 지속성"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "IsSecureKernelRunning", "보안 커널 실행 상태"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "KeyGuardEnabled", "Key Guard 활성화"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "SecretsMode", "비밀 모드"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SecureBiometrics", "Enabled", "보안 생체 인식 활성화"),
+                    (@"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlags", "LSA 구성 플래그"),
+                    (@"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlagsDefault", "LSA 기본 구성 플래그"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 정책 활성화"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HypervisorEnforcedCodeIntegrity", "정책 HVCI 활성화"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIMATRequired", "HVCI MAT 요구"),
+                    (@"SYSTEM\CurrentControlSet\Control\CI\Config", "VulnerableDriverBlocklistEnable", "취약한 드라이버 차단")
                 };
 
                 bool vbsEnabled = false;
@@ -3517,7 +3812,7 @@ namespace VmCompatibilityTool
             // 헤더 정보
             sb.AppendLine($"# {title}");
             sb.AppendLine($"# 생성일시: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-            sb.AppendLine($"# VM Compatibility Tool v1.2.0");
+            sb.AppendLine($"# VM Compatibility Tool v1.2.1");
             sb.AppendLine("");
 
             if (typeof(T) == typeof(SystemInfoItem))
