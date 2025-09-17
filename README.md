@@ -74,7 +74,6 @@ dotnet publish VmCompatibilityTool.csproj -c Release -r win-x64 --self-contained
 ## ⚠️ 주의사항
 
 - **관리자 권한 필요**: 시스템 정보 수집 및 Windows 기능 변경을 위해 관리자 권한이 필요합니다
-- **보안 기능 비활성화**: VBS 및 Hyper-V 비활성화는 시스템 보안 수준을 낮출 수 있습니다
 - **재부팅 필요**: 변경사항 적용을 위해 시스템 재부팅이 필요합니다
 - **백업 권장**: 시스템 변경 전 중요 데이터 백업을 권장합니다
 
