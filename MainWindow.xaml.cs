@@ -10,6 +10,7 @@ using System.Management;
 using System.Reflection;
 using System.Security.Principal;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Markup;
@@ -2496,12 +2497,22 @@ namespace VmCompatibilityTool
 
             try
             {
-                await Task.Run(() => DisableVbsAndHyperV());
+                await Task.Run(() => DisableVbsAndHyperVWithIntegratedProgress());
+            }
+            catch (OperationCanceledException)
+            {
+                StatusTextBlock.Text = "작업이 취소되었습니다";
+                AppendToResultTextBox("\n작업이 사용자에 의해 취소되었습니다.");
+            }
+            catch (Exception ex)
+            {
+                StatusTextBlock.Text = "작업 중 오류 발생";
+                AppendToResultTextBox($"\n오류 발생: {ex.Message}");
             }
             finally
             {
                 ExecuteDisableButton.IsEnabled = true;
-                StatusTextBlock.Text = "비활성화 작업 완료";
+                StatusTextBlock.Text = "준비됨";
             }
         }
 
@@ -2528,6 +2539,233 @@ namespace VmCompatibilityTool
                 ShowRebootDialog();
             });
         }
+
+        private void AppendToResultTextBox(string text)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                DisableResultTextBox.Text += text + Environment.NewLine;
+                DisableResultTextBox.ScrollToEnd();
+            });
+        }
+
+        private void UpdateCurrentTaskStatus(string status)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                StatusTextBlock.Text = status;
+            });
+        }
+
+        private void DisableVbsAndHyperVWithIntegratedProgress()
+        {
+            try
+            {
+                AppendToResultTextBox("=== VBS 및 Hyper-V 비활성화 작업 ===");
+                Thread.Sleep(500); // UI 업데이트를 위한 짧은 대기
+
+                // 가상화 설정 점검 결과가 있으면 필요한 항목만 조치
+                if (isVirtualizationCheckCompleted && lastVirtualizationCheckResult != null)
+                {
+                    AppendToResultTextBox("가상화 설정 점검 결과를 기반으로 필요한 항목만 조치합니다.");
+                    DisableVbsAndHyperVSelectiveWithIntegratedProgress();
+                }
+                else
+                {
+                    AppendToResultTextBox("모든 항목에 대해 조치를 진행합니다.");
+                    DisableVbsAndHyperVCompleteWithIntegratedProgress();
+                }
+
+                AppendToResultTextBox("");
+                AppendToResultTextBox("✅ 모든 비활성화 작업이 완료되었습니다.");
+                AppendToResultTextBox("🔄 변경사항 적용을 위해 시스템 재부팅이 필요합니다.");
+
+                Dispatcher.Invoke(() =>
+                {
+                    ShowRebootDialog();
+                });
+            }
+            catch (Exception ex)
+            {
+                AppendToResultTextBox($"❌ 작업 중 오류가 발생했습니다: {ex.Message}");
+                throw;
+            }
+            finally
+            {
+                UpdateCurrentTaskStatus("준비됨");
+            }
+        }
+
+        private void DisableVbsAndHyperVCompleteWithIntegratedProgress()
+        {
+            var totalSteps = 4;
+            var currentStep = 0;
+
+            try
+            {
+                AppendToResultTextBox("");
+
+                // 1. Hyper-V 기능 비활성화
+                currentStep++;
+                UpdateCurrentTaskStatus($"({currentStep}/{totalSteps}) Hyper-V 기능 비활성화 중...");
+                AppendToResultTextBox($"📋 {currentStep}. Hyper-V 기능 비활성화 중...");
+
+                var hyperVResult = DisableHyperVFeatures();
+                AppendToResultTextBox(hyperVResult);
+                AppendToResultTextBox("");
+
+                Thread.Sleep(500); // UI 업데이트를 위한 짧은 대기
+
+                // 2. WSL2 비활성화
+                currentStep++;
+                UpdateCurrentTaskStatus($"({currentStep}/{totalSteps}) WSL2 비활성화 중...");
+                AppendToResultTextBox($"📋 {currentStep}. WSL2 비활성화 중...");
+
+                var wslResult = DisableWSL2();
+                AppendToResultTextBox(wslResult);
+                AppendToResultTextBox("");
+
+                Thread.Sleep(500);
+
+                // 3. VBS 비활성화
+                currentStep++;
+                UpdateCurrentTaskStatus($"({currentStep}/{totalSteps}) VBS (가상화 기반 보안) 비활성화 중...");
+                AppendToResultTextBox($"📋 {currentStep}. VBS (가상화 기반 보안) 비활성화 중...");
+
+                var vbsResult = DisableVBS();
+                AppendToResultTextBox(vbsResult);
+                AppendToResultTextBox("");
+
+                Thread.Sleep(500);
+
+                // 4. 코어 격리 비활성화
+                currentStep++;
+                UpdateCurrentTaskStatus($"({currentStep}/{totalSteps}) 코어 격리 비활성화 중...");
+                AppendToResultTextBox($"📋 {currentStep}. 코어 격리 비활성화 중...");
+
+                var coreIsolationResult = DisableCoreIsolation();
+                AppendToResultTextBox(coreIsolationResult);
+                AppendToResultTextBox("");
+
+                UpdateCurrentTaskStatus("모든 작업 완료");
+            }
+            catch (Exception ex)
+            {
+                AppendToResultTextBox($"❌ 단계 {currentStep}에서 오류 발생: {ex.Message}");
+                throw;
+            }
+        }
+
+        private void DisableVbsAndHyperVSelectiveWithIntegratedProgress()
+        {
+            try
+            {
+                AppendToResultTextBox("");
+
+                // 점검 결과 분석
+                var needsHyperVDisable = CheckIfHyperVNeedsDisabling();
+                var needsWSLDisable = CheckIfWSLNeedsDisabling();
+                var needsVBSDisable = CheckIfVBSNeedsDisabling();
+                var needsCoreIsolationDisable = CheckIfCoreIsolationNeedsDisabling();
+
+                var totalSteps = new List<bool> { needsHyperVDisable, needsWSLDisable, needsVBSDisable, needsCoreIsolationDisable }.Count(x => x);
+
+                if (totalSteps == 0)
+                {
+                    UpdateCurrentTaskStatus("모든 항목이 이미 최적화되어 있습니다");
+                    AppendToResultTextBox("✅ 모든 항목이 이미 최적화되어 있습니다. 추가 조치가 필요하지 않습니다.");
+                    return;
+                }
+
+                var currentStep = 0;
+
+                // 1. Hyper-V 기능 확인 및 비활성화
+                if (needsHyperVDisable)
+                {
+                    currentStep++;
+                    UpdateCurrentTaskStatus($"({currentStep}/{totalSteps}) Hyper-V 기능 비활성화 중...");
+                    AppendToResultTextBox($"📋 {currentStep}. Hyper-V 기능 비활성화 중...");
+
+                    var hyperVResult = DisableHyperVFeatures();
+                    AppendToResultTextBox(hyperVResult);
+                    AppendToResultTextBox("");
+                    Thread.Sleep(500);
+                }
+                else
+                {
+                    AppendToResultTextBox("✅ Hyper-V 기능: 이미 비활성화되어 있음");
+                    AppendToResultTextBox("");
+                }
+
+                // 2. WSL2 확인 및 비활성화
+                if (needsWSLDisable)
+                {
+                    currentStep++;
+                    UpdateCurrentTaskStatus($"({currentStep}/{totalSteps}) WSL2 비활성화 중...");
+                    AppendToResultTextBox($"📋 {currentStep}. WSL2 비활성화 중...");
+
+                    var wslResult = DisableWSL2();
+                    AppendToResultTextBox(wslResult);
+                    AppendToResultTextBox("");
+                    Thread.Sleep(500);
+                }
+                else
+                {
+                    AppendToResultTextBox("✅ WSL2: 이미 비활성화되어 있음");
+                    AppendToResultTextBox("");
+                }
+
+                // 3. VBS 확인 및 비활성화
+                if (needsVBSDisable)
+                {
+                    currentStep++;
+                    UpdateCurrentTaskStatus($"({currentStep}/{totalSteps}) VBS (가상화 기반 보안) 비활성화 중...");
+                    AppendToResultTextBox($"📋 {currentStep}. VBS (가상화 기반 보안) 비활성화 중...");
+
+                    var vbsResult = DisableVBSSelective();
+                    AppendToResultTextBox(vbsResult);
+                    AppendToResultTextBox("");
+                    Thread.Sleep(500);
+                }
+                else
+                {
+                    AppendToResultTextBox("✅ VBS (가상화 기반 보안): 이미 비활성화되어 있음");
+                    AppendToResultTextBox("");
+                }
+
+                // 4. 코어 격리 확인 및 비활성화
+                if (needsCoreIsolationDisable)
+                {
+                    currentStep++;
+                    UpdateCurrentTaskStatus($"({currentStep}/{totalSteps}) 코어 격리 비활성화 중...");
+                    AppendToResultTextBox($"📋 {currentStep}. 코어 격리 비활성화 중...");
+
+                    var coreIsolationResult = DisableCoreIsolation();
+                    AppendToResultTextBox(coreIsolationResult);
+                    AppendToResultTextBox("");
+                }
+                else
+                {
+                    AppendToResultTextBox("✅ 코어 격리: 이미 비활성화되어 있음");
+                    AppendToResultTextBox("");
+                }
+
+                if (currentStep > 0)
+                {
+                    AppendToResultTextBox($"📊 총 {currentStep}개 항목의 비활성화 작업이 완료되었습니다.");
+                }
+
+                UpdateCurrentTaskStatus("선택적 작업 완료");
+            }
+            catch (Exception ex)
+            {
+                AppendToResultTextBox($"❌ 선택적 비활성화 중 오류 발생: {ex.Message}");
+                throw;
+            }
+        }
+
+
+
 
         private void DisableVbsAndHyperVComplete(StringBuilder result)
         {
