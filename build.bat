@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-setlocal
+setlocal enabledelayedexpansion
 
 echo ========================================
 echo     VM Compatibility Tool 빌드 스크립트
@@ -37,19 +37,10 @@ if "%choice%"=="2" (
     echo.
     echo 버전을 !new_version!로 업데이트 중...
 
-    :: csproj 파일의 버전 업데이트
-    powershell -Command ^
-        "$content = Get-Content 'VmCompatibilityTool.csproj' -Raw; " ^
-        "$content = $content -replace '<AssemblyVersion>[^<]*</AssemblyVersion>', '<AssemblyVersion>!new_version!.0</AssemblyVersion>'; " ^
-        "$content = $content -replace '<FileVersion>[^<]*</FileVersion>', '<FileVersion>!new_version!.0</FileVersion>'; " ^
-        "Set-Content 'VmCompatibilityTool.csproj' -Value $content -NoNewline"
-
-    :: MainWindow.xaml.cs 파일의 버전 업데이트
-    powershell -Command ^
-        "$content = Get-Content 'MainWindow.xaml.cs' -Raw; " ^
-        "$content = $content -replace 'VersionTextBlock\.Text = \"\"v[^\"\"]*\"\"', 'VersionTextBlock.Text = \"\"v!new_version!\"\"'; " ^
-        "$content = $content -replace 'VM Compatibility Tool v[^\"\"]*', 'VM Compatibility Tool v!new_version!'; " ^
-        "Set-Content 'MainWindow.xaml.cs' -Value $content -NoNewline"
+    :: csproj 파일의 버전 업데이트 (임시 파일 방식)
+    echo !new_version! > temp_version.txt
+    powershell -Command "$ver = Get-Content 'temp_version.txt'; (Get-Content 'VmCompatibilityTool.csproj') | ForEach-Object { $_ -replace '<AssemblyVersion>.*</AssemblyVersion>', \"<AssemblyVersion>$ver.0</AssemblyVersion>\" -replace '<FileVersion>.*</FileVersion>', \"<FileVersion>$ver.0</FileVersion>\" } | Set-Content 'VmCompatibilityTool.csproj'"
+    if exist temp_version.txt del temp_version.txt
 
     echo 버전 업데이트 완료: !new_version!
     echo.

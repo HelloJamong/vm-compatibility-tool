@@ -2326,7 +2326,7 @@ namespace VmCompatibilityTool
                     {
                         result.AppendLine("✓ hypervisorlaunchtype: Off (비활성화 상태)");
                         result.AppendLine("  → 부팅 시 하이퍼바이저가 로드되지 않아 가상화 소프트웨어 사용 가능");
-                        result.AppendLine("  → 현재 설정이 올바름 (비활성화 필요 없음)");
+                        result.AppendLine("  → 조치 필요없음");
                     }
                     else if (output.Contains("hypervisorlaunchtype") && output.Contains("Auto"))
                     {
@@ -2336,7 +2336,7 @@ namespace VmCompatibilityTool
                     }
                     else
                     {
-                        result.AppendLine("? hypervisorlaunchtype: 설정되지 않음 (기본값)");
+                        result.AppendLine("? hypervisorlaunchtype: 값이 존재하지 않음");
                         result.AppendLine("  → Windows 기본 설정 (보통 Auto와 동일하게 작동)");
                         result.AppendLine("  → 비활성화 권장: 'VBS 및 Hyper-V 비활성화' 기능을 사용하여 Off로 설정 권장");
                     }
@@ -3823,7 +3823,7 @@ namespace VmCompatibilityTool
                             Category = "hypervisorlaunchtype",
                             Status = "✓ Off (비활성화)",
                             Details = "부팅 시 하이퍼바이저가 로드되지 않아 가상화 소프트웨어 사용 가능",
-                            Recommendation = "현재 설정이 올바름 (비활성화 필요 없음)"
+                            Recommendation = "조치 필요없음"
                         });
                     }
                     else if (output.Contains("hypervisorlaunchtype") && output.Contains("Auto"))
@@ -3841,9 +3841,9 @@ namespace VmCompatibilityTool
                         items.Add(new VirtualizationInfoItem
                         {
                             Category = "hypervisorlaunchtype",
-                            Status = "? 설정되지 않음",
+                            Status = "? 값이 존재하지 않음",
                             Details = "Windows 기본 설정 (보통 Auto와 동일하게 작동)",
-                            Recommendation = "비활성화 권장: 'VBS 및 Hyper-V 비활성화' 기능 사용 권장"
+                            Recommendation = "값이 존재하지 않음"
                         });
                     }
                 }
