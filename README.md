@@ -15,6 +15,7 @@ VM Compatibility Tool은 Windows 시스템에서 VM을 원활하게 사용하기
 - **디스크 정보**: 드라이브별 용량 정보, SSD/HDD 구분
 - **가상화 지원**: 하드웨어 가상화 활성화 여부, Hyper-V 상태, VBS 상태
 - **부팅 정보**: 마지막 부팅 시간, 시스템 가동 시간
+- **전원 설정**: PC의 절전 정보 및 화면 보호기 설정, 전원 설정 정보
 
 ### 2. **VBS 및 Hyper-V 비활성화**
 가상머신 성능 최적화를 위해 Windows 보안 기능을 비활성화:
@@ -93,4 +94,4 @@ dotnet publish VmCompatibilityTool.csproj -c Release -r win-x64 --self-contained
 - 코드 품질 및 안정성 최적화
 - 자동화된 오류 처리 및 예외 관리 시스템 구축
 
-**최종 업데이트**: 2025-09-17
+**최종 업데이트**: 2025-11-13
