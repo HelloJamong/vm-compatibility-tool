@@ -311,7 +311,7 @@ namespace VmCompatibilityTool
             }
             catch
             {
-                VersionTextBlock.Text = "v1.2.1";
+                VersionTextBlock.Text = "v1.2.3";
             }
         }
 
@@ -442,17 +442,23 @@ namespace VmCompatibilityTool
                 CollectDiskInfoToTable(systemInfoItems);
                 CollectBootInfoToTable(systemInfoItems);
 
+                // 새로 추가된 정보 수집 메서드들
+                CollectMotherboardInfoToTable(systemInfoItems);
+                CollectGraphicsCardInfoToTable(systemInfoItems);
+                CollectPowerManagementInfoToTable(systemInfoItems);
+                CollectEventLogInfoToTable(systemInfoItems);
+
                 // UI 업데이트를 더 안전하게 처리
                 SafeUpdateSystemInfoUI(systemInfoItems, "시스템 정보 수집 완료");
             }
             catch (Exception ex)
             {
                 // 예외 발생 시에도 안전하게 UI 업데이트
-                systemInfoItems.Add(new SystemInfoItem 
-                { 
-                    Category = "오류", 
-                    Item = "시스템 정보 수집 실패", 
-                    Value = $"오류: {ex.Message}" 
+                systemInfoItems.Add(new SystemInfoItem
+                {
+                    Category = "오류",
+                    Item = "시스템 정보 수집 실패",
+                    Value = $"오류: {ex.Message}"
                 });
                 SafeUpdateSystemInfoUI(systemInfoItems, "시스템 정보 수집 실패");
             }
@@ -3571,6 +3577,1047 @@ namespace VmCompatibilityTool
                 items.Add(new SystemInfoItem
                 {
                     Category = "부팅 정보",
+                    Item = "오류",
+                    Value = $"정보 수집 실패: {ex.Message}"
+                });
+            }
+        }
+
+        private void CollectMotherboardInfoToTable(ObservableCollection<SystemInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("메인보드 정보 수집 중...");
+
+                // 메인보드 제조사 및 모델 정보
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT Manufacturer, Product FROM Win32_BaseBoard"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            var manufacturer = obj["Manufacturer"]?.ToString() ?? "확인 불가";
+                            var product = obj["Product"]?.ToString() ?? "확인 불가";
+
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "메인보드",
+                                Item = "제조사",
+                                Value = manufacturer
+                            });
+
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "메인보드",
+                                Item = "모델",
+                                Value = product
+                            });
+                        }
+                    }
+                }
+                catch (Exception mbEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "메인보드",
+                        Item = "제조사/모델",
+                        Value = $"확인 불가: {mbEx.Message}"
+                    });
+                }
+
+                // 칩셋 정보
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT Name, Description FROM Win32_IDEController"))
+                    {
+                        bool chipsetFound = false;
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            var name = obj["Name"]?.ToString() ?? "";
+                            if (!string.IsNullOrWhiteSpace(name))
+                            {
+                                items.Add(new SystemInfoItem
+                                {
+                                    Category = "메인보드",
+                                    Item = "칩셋 컨트롤러",
+                                    Value = name
+                                });
+                                chipsetFound = true;
+                                break; // 첫 번째 항목만 표시
+                            }
+                        }
+
+                        if (!chipsetFound)
+                        {
+                            // PCI 버스로 칩셋 정보 확인
+                            using (var pciSearcher = new ManagementObjectSearcher("SELECT Name FROM Win32_Bus WHERE DeviceID LIKE 'PCI%'"))
+                            {
+                                foreach (ManagementObject pciObj in pciSearcher.Get())
+                                {
+                                    var name = pciObj["Name"]?.ToString() ?? "PCI 버스";
+                                    items.Add(new SystemInfoItem
+                                    {
+                                        Category = "메인보드",
+                                        Item = "칩셋",
+                                        Value = name
+                                    });
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception chipsetEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "메인보드",
+                        Item = "칩셋",
+                        Value = $"확인 불가: {chipsetEx.Message}"
+                    });
+                }
+
+                // BIOS 정보
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT Manufacturer, Name, SMBIOSBIOSVersion, ReleaseDate FROM Win32_BIOS"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            var biosManufacturer = obj["Manufacturer"]?.ToString() ?? "확인 불가";
+                            var biosName = obj["Name"]?.ToString() ?? "확인 불가";
+                            var biosVersion = obj["SMBIOSBIOSVersion"]?.ToString() ?? "확인 불가";
+                            var biosDate = obj["ReleaseDate"]?.ToString() ?? "";
+
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "메인보드",
+                                Item = "BIOS 제조사",
+                                Value = biosManufacturer
+                            });
+
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "메인보드",
+                                Item = "BIOS 종류",
+                                Value = biosName
+                            });
+
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "메인보드",
+                                Item = "BIOS 버전",
+                                Value = biosVersion
+                            });
+
+                            if (!string.IsNullOrWhiteSpace(biosDate) && biosDate.Length >= 8)
+                            {
+                                // WMI 날짜 형식: yyyyMMddHHmmss.xxxxxx+xxx
+                                string formattedDate = $"{biosDate.Substring(0, 4)}-{biosDate.Substring(4, 2)}-{biosDate.Substring(6, 2)}";
+                                items.Add(new SystemInfoItem
+                                {
+                                    Category = "메인보드",
+                                    Item = "BIOS 날짜",
+                                    Value = formattedDate
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (Exception biosEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "메인보드",
+                        Item = "BIOS 정보",
+                        Value = $"확인 불가: {biosEx.Message}"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SystemInfoItem
+                {
+                    Category = "메인보드",
+                    Item = "오류",
+                    Value = $"정보 수집 실패: {ex.Message}"
+                });
+            }
+        }
+
+        private void CollectGraphicsCardInfoToTable(ObservableCollection<SystemInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("그래픽카드 정보 수집 중...");
+
+                using (var searcher = new ManagementObjectSearcher("SELECT Name, AdapterRAM, DriverVersion, DriverDate FROM Win32_VideoController"))
+                {
+                    int gpuIndex = 0;
+                    foreach (ManagementObject obj in searcher.Get())
+                    {
+                        gpuIndex++;
+                        string categoryName = gpuIndex == 1 ? "그래픽카드" : $"그래픽카드 #{gpuIndex}";
+
+                        // GPU 모델명
+                        var gpuName = obj["Name"]?.ToString() ?? "확인 불가";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = categoryName,
+                            Item = "모델",
+                            Value = gpuName
+                        });
+
+                        // 비디오 메모리
+                        try
+                        {
+                            var vramBytes = obj["AdapterRAM"];
+                            if (vramBytes != null)
+                            {
+                                long vram = Convert.ToInt64(vramBytes);
+                                if (vram > 0)
+                                {
+                                    double vramGB = vram / (1024.0 * 1024.0 * 1024.0);
+                                    items.Add(new SystemInfoItem
+                                    {
+                                        Category = categoryName,
+                                        Item = "비디오 메모리",
+                                        Value = $"{vramGB:F2} GB"
+                                    });
+                                }
+                            }
+                        }
+                        catch { }
+
+                        // 드라이버 버전
+                        var driverVersion = obj["DriverVersion"]?.ToString() ?? "확인 불가";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = categoryName,
+                            Item = "드라이버 버전",
+                            Value = driverVersion
+                        });
+
+                        // 드라이버 날짜
+                        try
+                        {
+                            var driverDate = obj["DriverDate"]?.ToString() ?? "";
+                            if (!string.IsNullOrWhiteSpace(driverDate) && driverDate.Length >= 8)
+                            {
+                                // WMI 날짜 형식: yyyyMMddHHmmss.xxxxxx+xxx
+                                string formattedDate = $"{driverDate.Substring(0, 4)}-{driverDate.Substring(4, 2)}-{driverDate.Substring(6, 2)}";
+                                items.Add(new SystemInfoItem
+                                {
+                                    Category = categoryName,
+                                    Item = "드라이버 날짜",
+                                    Value = formattedDate
+                                });
+                            }
+                            else
+                            {
+                                items.Add(new SystemInfoItem
+                                {
+                                    Category = categoryName,
+                                    Item = "드라이버 날짜",
+                                    Value = "확인 불가"
+                                });
+                            }
+                        }
+                        catch (Exception dateEx)
+                        {
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = categoryName,
+                                Item = "드라이버 날짜",
+                                Value = $"확인 불가: {dateEx.Message}"
+                            });
+                        }
+                    }
+
+                    if (gpuIndex == 0)
+                    {
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "그래픽카드",
+                            Item = "정보",
+                            Value = "그래픽카드를 찾을 수 없습니다"
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SystemInfoItem
+                {
+                    Category = "그래픽카드",
+                    Item = "오류",
+                    Value = $"정보 수집 실패: {ex.Message}"
+                });
+            }
+        }
+
+        private void CollectPowerManagementInfoToTable(ObservableCollection<SystemInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("전원 관리 정보 수집 중...");
+
+                // 현재 전원 구성표
+                try
+                {
+                    var powerCfgProcess = new System.Diagnostics.Process
+                    {
+                        StartInfo = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "powercfg",
+                            Arguments = "/getactivescheme",
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        }
+                    };
+                    powerCfgProcess.Start();
+                    string output = powerCfgProcess.StandardOutput.ReadToEnd();
+                    powerCfgProcess.WaitForExit();
+
+                    // 출력 예: Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (균형 조정)
+                    var match = System.Text.RegularExpressions.Regex.Match(output, @"\((.+)\)");
+                    string schemeName = match.Success ? match.Groups[1].Value : "확인 불가";
+
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "현재 전원 구성표",
+                        Value = schemeName
+                    });
+                }
+                catch (Exception powerEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "전원 구성표",
+                        Value = $"확인 불가: {powerEx.Message}"
+                    });
+                }
+
+                // 디스플레이 끄기 설정 (AC 및 DC)
+                try
+                {
+                    // AC (전원 연결 시)
+                    var displayAcProcess = new System.Diagnostics.Process
+                    {
+                        StartInfo = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "powercfg",
+                            Arguments = "/query SCHEME_CURRENT SUB_VIDEO VIDEOIDLE",
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        }
+                    };
+                    displayAcProcess.Start();
+                    string displayOutput = displayAcProcess.StandardOutput.ReadToEnd();
+                    displayAcProcess.WaitForExit();
+
+                    var acMatch = System.Text.RegularExpressions.Regex.Match(displayOutput, @"현재 AC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    if (!acMatch.Success)
+                    {
+                        acMatch = System.Text.RegularExpressions.Regex.Match(displayOutput, @"Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    int displayAcSeconds = 0;
+                    int displayDcSeconds = 0;
+
+                    if (acMatch.Success)
+                    {
+                        displayAcSeconds = Convert.ToInt32(acMatch.Groups[1].Value, 16);
+                        string timeStr = displayAcSeconds == 0 ? "해당 없음" : $"{displayAcSeconds / 60}분";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "전원 관리",
+                            Item = "디스플레이 끄기 (전원 연결)",
+                            Value = timeStr
+                        });
+                    }
+
+                    var dcMatch = System.Text.RegularExpressions.Regex.Match(displayOutput, @"현재 DC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    if (!dcMatch.Success)
+                    {
+                        dcMatch = System.Text.RegularExpressions.Regex.Match(displayOutput, @"Current DC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    if (dcMatch.Success)
+                    {
+                        displayDcSeconds = Convert.ToInt32(dcMatch.Groups[1].Value, 16);
+                        string timeStr = displayDcSeconds == 0 ? "해당 없음" : $"{displayDcSeconds / 60}분";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "전원 관리",
+                            Item = "디스플레이 끄기 (배터리)",
+                            Value = timeStr
+                        });
+                    }
+
+                    // 현재 PC의 실제 설정 (AC 또는 DC 중 활성)
+                    bool isOnBattery = false;
+                    try
+                    {
+                        using (var batterySearcher = new ManagementObjectSearcher("SELECT BatteryStatus FROM Win32_Battery"))
+                        {
+                            var batteryCollection = batterySearcher.Get();
+                            isOnBattery = batteryCollection.Count > 0; // 배터리가 있으면 노트북으로 간주
+                        }
+                    }
+                    catch { }
+
+                    string currentSetting = isOnBattery ?
+                        (displayDcSeconds == 0 ? "해당 없음" : $"{displayDcSeconds / 60}분") :
+                        (displayAcSeconds == 0 ? "해당 없음" : $"{displayAcSeconds / 60}분");
+
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "▶ 현재 디스플레이 끄기 설정",
+                        Value = currentSetting
+                    });
+                }
+                catch (Exception displayEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "디스플레이 설정",
+                        Value = $"확인 불가: {displayEx.Message}"
+                    });
+                }
+
+                // 절전 모드 설정
+                try
+                {
+                    var sleepProcess = new System.Diagnostics.Process
+                    {
+                        StartInfo = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "powercfg",
+                            Arguments = "/query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE",
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        }
+                    };
+                    sleepProcess.Start();
+                    string sleepOutput = sleepProcess.StandardOutput.ReadToEnd();
+                    sleepProcess.WaitForExit();
+
+                    var acMatch = System.Text.RegularExpressions.Regex.Match(sleepOutput, @"현재 AC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    if (!acMatch.Success)
+                    {
+                        acMatch = System.Text.RegularExpressions.Regex.Match(sleepOutput, @"Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    int sleepAcSeconds = 0;
+                    int sleepDcSeconds = 0;
+
+                    if (acMatch.Success)
+                    {
+                        sleepAcSeconds = Convert.ToInt32(acMatch.Groups[1].Value, 16);
+                        string timeStr = sleepAcSeconds == 0 ? "해당 없음" : $"{sleepAcSeconds / 60}분";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "전원 관리",
+                            Item = "절전 모드 (전원 연결)",
+                            Value = timeStr
+                        });
+                    }
+
+                    var dcMatch = System.Text.RegularExpressions.Regex.Match(sleepOutput, @"현재 DC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    if (!dcMatch.Success)
+                    {
+                        dcMatch = System.Text.RegularExpressions.Regex.Match(sleepOutput, @"Current DC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    if (dcMatch.Success)
+                    {
+                        sleepDcSeconds = Convert.ToInt32(dcMatch.Groups[1].Value, 16);
+                        string timeStr = sleepDcSeconds == 0 ? "해당 없음" : $"{sleepDcSeconds / 60}분";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "전원 관리",
+                            Item = "절전 모드 (배터리)",
+                            Value = timeStr
+                        });
+                    }
+
+                    // 현재 PC의 실제 설정 (AC 또는 DC 중 활성)
+                    bool isOnBattery = false;
+                    try
+                    {
+                        using (var batterySearcher = new ManagementObjectSearcher("SELECT BatteryStatus FROM Win32_Battery"))
+                        {
+                            var batteryCollection = batterySearcher.Get();
+                            isOnBattery = batteryCollection.Count > 0; // 배터리가 있으면 노트북으로 간주
+                        }
+                    }
+                    catch { }
+
+                    string currentSleepSetting = isOnBattery ?
+                        (sleepDcSeconds == 0 ? "해당 없음" : $"{sleepDcSeconds / 60}분") :
+                        (sleepAcSeconds == 0 ? "해당 없음" : $"{sleepAcSeconds / 60}분");
+
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "▶ 현재 절전 모드 설정",
+                        Value = currentSleepSetting
+                    });
+                }
+                catch (Exception sleepEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "절전 모드",
+                        Value = $"확인 불가: {sleepEx.Message}"
+                    });
+                }
+
+                // USB 선택적 절전 설정
+                try
+                {
+                    var usbProcess = new System.Diagnostics.Process
+                    {
+                        StartInfo = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "powercfg",
+                            Arguments = "/query SCHEME_CURRENT SUB_USB USBSELECTIVESUSPEND",
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        }
+                    };
+                    usbProcess.Start();
+                    string usbOutput = usbProcess.StandardOutput.ReadToEnd();
+                    usbProcess.WaitForExit();
+
+                    var acMatch = System.Text.RegularExpressions.Regex.Match(usbOutput, @"현재 AC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    if (!acMatch.Success)
+                    {
+                        acMatch = System.Text.RegularExpressions.Regex.Match(usbOutput, @"Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    if (acMatch.Success)
+                    {
+                        int value = Convert.ToInt32(acMatch.Groups[1].Value, 16);
+                        string status = value == 0 ? "사용 안 함" : "사용";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "전원 관리",
+                            Item = "USB 선택적 절전 모드",
+                            Value = status
+                        });
+                    }
+                }
+                catch (Exception usbEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "USB 절전",
+                        Value = $"확인 불가: {usbEx.Message}"
+                    });
+                }
+
+                // 하드 디스크 끄기 설정
+                try
+                {
+                    var diskProcess = new System.Diagnostics.Process
+                    {
+                        StartInfo = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "powercfg",
+                            Arguments = "/query SCHEME_CURRENT SUB_DISK DISKIDLE",
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        }
+                    };
+                    diskProcess.Start();
+                    string diskOutput = diskProcess.StandardOutput.ReadToEnd();
+                    diskProcess.WaitForExit();
+
+                    var acMatch = System.Text.RegularExpressions.Regex.Match(diskOutput, @"현재 AC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    if (!acMatch.Success)
+                    {
+                        acMatch = System.Text.RegularExpressions.Regex.Match(diskOutput, @"Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    int diskAcSeconds = 0;
+                    int diskDcSeconds = 0;
+
+                    if (acMatch.Success)
+                    {
+                        diskAcSeconds = Convert.ToInt32(acMatch.Groups[1].Value, 16);
+                        string timeStr = diskAcSeconds == 0 ? "해당 없음" : $"{diskAcSeconds / 60}분";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "전원 관리",
+                            Item = "하드 디스크 끄기 (전원 연결)",
+                            Value = timeStr
+                        });
+                    }
+
+                    var dcMatch = System.Text.RegularExpressions.Regex.Match(diskOutput, @"현재 DC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    if (!dcMatch.Success)
+                    {
+                        dcMatch = System.Text.RegularExpressions.Regex.Match(diskOutput, @"Current DC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    if (dcMatch.Success)
+                    {
+                        diskDcSeconds = Convert.ToInt32(dcMatch.Groups[1].Value, 16);
+                        string timeStr = diskDcSeconds == 0 ? "해당 없음" : $"{diskDcSeconds / 60}분";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "전원 관리",
+                            Item = "하드 디스크 끄기 (배터리)",
+                            Value = timeStr
+                        });
+                    }
+
+                    // 현재 PC의 실제 설정
+                    bool isOnBattery = false;
+                    try
+                    {
+                        using (var batterySearcher = new ManagementObjectSearcher("SELECT BatteryStatus FROM Win32_Battery"))
+                        {
+                            var batteryCollection = batterySearcher.Get();
+                            isOnBattery = batteryCollection.Count > 0; // 배터리가 있으면 노트북으로 간주
+                        }
+                    }
+                    catch { }
+
+                    string currentDiskSetting = isOnBattery ?
+                        (diskDcSeconds == 0 ? "해당 없음" : $"{diskDcSeconds / 60}분") :
+                        (diskAcSeconds == 0 ? "해당 없음" : $"{diskAcSeconds / 60}분");
+
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "▶ 현재 하드 디스크 끄기 설정",
+                        Value = currentDiskSetting
+                    });
+                }
+                catch (Exception diskEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "하드 디스크 끄기",
+                        Value = $"확인 불가: {diskEx.Message}"
+                    });
+                }
+
+                // 하이브리드 절전 모드 설정
+                try
+                {
+                    var hybridProcess = new System.Diagnostics.Process
+                    {
+                        StartInfo = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "powercfg",
+                            Arguments = "/query SCHEME_CURRENT SUB_SLEEP HYBRIDSLEEP",
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        }
+                    };
+                    hybridProcess.Start();
+                    string hybridOutput = hybridProcess.StandardOutput.ReadToEnd();
+                    hybridProcess.WaitForExit();
+
+                    var acMatch = System.Text.RegularExpressions.Regex.Match(hybridOutput, @"현재 AC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    if (!acMatch.Success)
+                    {
+                        acMatch = System.Text.RegularExpressions.Regex.Match(hybridOutput, @"Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    if (acMatch.Success)
+                    {
+                        int value = Convert.ToInt32(acMatch.Groups[1].Value, 16);
+                        string status = value == 0 ? "끔" : "켜짐";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "전원 관리",
+                            Item = "하이브리드 절전 모드 허용 (전원 연결)",
+                            Value = status
+                        });
+                    }
+
+                    var dcMatch = System.Text.RegularExpressions.Regex.Match(hybridOutput, @"현재 DC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    if (!dcMatch.Success)
+                    {
+                        dcMatch = System.Text.RegularExpressions.Regex.Match(hybridOutput, @"Current DC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    if (dcMatch.Success)
+                    {
+                        int value = Convert.ToInt32(dcMatch.Groups[1].Value, 16);
+                        string status = value == 0 ? "끔" : "켜짐";
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "전원 관리",
+                            Item = "하이브리드 절전 모드 허용 (배터리)",
+                            Value = status
+                        });
+                    }
+
+                    // 현재 설정
+                    bool isOnBattery = false;
+                    try
+                    {
+                        using (var batterySearcher = new ManagementObjectSearcher("SELECT BatteryStatus FROM Win32_Battery"))
+                        {
+                            var batteryCollection = batterySearcher.Get();
+                            isOnBattery = batteryCollection.Count > 0; // 배터리가 있으면 노트북으로 간주
+                        }
+                    }
+                    catch { }
+
+                    var currentAcMatch = System.Text.RegularExpressions.Regex.Match(hybridOutput, @"Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+                    var currentDcMatch = System.Text.RegularExpressions.Regex.Match(hybridOutput, @"Current DC Power Setting Index:\s*0x([0-9a-fA-F]+)");
+
+                    if (!currentAcMatch.Success)
+                    {
+                        currentAcMatch = System.Text.RegularExpressions.Regex.Match(hybridOutput, @"현재 AC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    }
+                    if (!currentDcMatch.Success)
+                    {
+                        currentDcMatch = System.Text.RegularExpressions.Regex.Match(hybridOutput, @"현재 DC 전원 설정 인덱스:\s*0x([0-9a-fA-F]+)");
+                    }
+
+                    string currentHybridStatus = "확인 불가";
+                    if (isOnBattery && currentDcMatch.Success)
+                    {
+                        int val = Convert.ToInt32(currentDcMatch.Groups[1].Value, 16);
+                        currentHybridStatus = val == 0 ? "끔" : "켜짐";
+                    }
+                    else if (!isOnBattery && currentAcMatch.Success)
+                    {
+                        int val = Convert.ToInt32(currentAcMatch.Groups[1].Value, 16);
+                        currentHybridStatus = val == 0 ? "끔" : "켜짐";
+                    }
+
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "▶ 현재 하이브리드 절전 모드",
+                        Value = currentHybridStatus
+                    });
+                }
+                catch (Exception hybridEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "하이브리드 절전 모드",
+                        Value = $"확인 불가: {hybridEx.Message}"
+                    });
+                }
+
+                // 화면보호기 설정
+                try
+                {
+                    using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop"))
+                    {
+                        if (key != null)
+                        {
+                            var screensaverActive = key.GetValue("ScreenSaveActive")?.ToString() ?? "0";
+                            bool isActive = screensaverActive == "1";
+
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "전원 관리",
+                                Item = "화면보호기 사용",
+                                Value = isActive ? "사용" : "사용 안 함"
+                            });
+
+                            if (isActive)
+                            {
+                                // 화면보호기 실행 파일
+                                var screensaver = key.GetValue("SCRNSAVE.EXE")?.ToString() ?? "없음";
+                                if (!string.IsNullOrEmpty(screensaver))
+                                {
+                                    string screensaverName = System.IO.Path.GetFileNameWithoutExtension(screensaver);
+                                    items.Add(new SystemInfoItem
+                                    {
+                                        Category = "전원 관리",
+                                        Item = "  └ 화면보호기 종류",
+                                        Value = screensaverName
+                                    });
+                                }
+
+                                // 화면보호기 대기 시간 (초)
+                                var timeout = key.GetValue("ScreenSaveTimeOut")?.ToString() ?? "0";
+                                if (int.TryParse(timeout, out int timeoutSeconds))
+                                {
+                                    int minutes = timeoutSeconds / 60;
+                                    items.Add(new SystemInfoItem
+                                    {
+                                        Category = "전원 관리",
+                                        Item = "  └ 대기 시간",
+                                        Value = $"{minutes}분"
+                                    });
+                                }
+
+                                // 화면보호기 해제 시 로그온 필요
+                                var secureScreensaver = key.GetValue("ScreenSaverIsSecure")?.ToString() ?? "0";
+                                bool isSecure = secureScreensaver == "1";
+                                items.Add(new SystemInfoItem
+                                {
+                                    Category = "전원 관리",
+                                    Item = "  └ 해제 후 로그온 필요",
+                                    Value = isSecure ? "예" : "아니오"
+                                });
+                            }
+                        }
+                        else
+                        {
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "전원 관리",
+                                Item = "화면보호기",
+                                Value = "레지스트리 접근 불가"
+                            });
+                        }
+                    }
+                }
+                catch (Exception screensaverEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "화면보호기",
+                        Value = $"확인 불가: {screensaverEx.Message}"
+                    });
+                }
+
+                // 네트워크 어댑터 전원 관리
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT Name, NetEnabled FROM Win32_NetworkAdapter WHERE NetEnabled=TRUE"))
+                    {
+                        int adapterCount = 0;
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            adapterCount++;
+                            var adapterName = obj["Name"]?.ToString() ?? "알 수 없는 어댑터";
+
+                            // 실제 전원 관리 설정은 디바이스 매니저를 통해서만 확인 가능
+                            // 여기서는 어댑터가 활성화되어 있음을 표시
+                            if (adapterCount <= 3) // 처음 3개만 표시
+                            {
+                                items.Add(new SystemInfoItem
+                                {
+                                    Category = "전원 관리",
+                                    Item = $"네트워크 어댑터 #{adapterCount}",
+                                    Value = $"{adapterName} (활성)"
+                                });
+                            }
+                        }
+
+                        if (adapterCount > 3)
+                        {
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "전원 관리",
+                                Item = "추가 네트워크 어댑터",
+                                Value = $"외 {adapterCount - 3}개"
+                            });
+                        }
+                    }
+                }
+                catch (Exception netEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "전원 관리",
+                        Item = "네트워크 어댑터",
+                        Value = $"확인 불가: {netEx.Message}"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SystemInfoItem
+                {
+                    Category = "전원 관리",
+                    Item = "오류",
+                    Value = $"정보 수집 실패: {ex.Message}"
+                });
+            }
+        }
+
+        private void CollectEventLogInfoToTable(ObservableCollection<SystemInfoItem> items)
+        {
+            try
+            {
+                UpdateProgress("이벤트 로그 수집 중...");
+
+                // 절전 관련 이벤트 (최근 7일)
+                try
+                {
+                    var sevenDaysAgo = DateTime.Now.AddDays(-7);
+                    var sleepEvents = new List<string>();
+
+                    using (var eventLog = new System.Diagnostics.EventLog("System"))
+                    {
+                        var entries = eventLog.Entries.Cast<System.Diagnostics.EventLogEntry>()
+                            .Where(e => e.TimeGenerated >= sevenDaysAgo &&
+                                       (e.InstanceId == 1 || e.InstanceId == 42) && // Sleep/Wake events
+                                       e.Source == "Power-Troubleshooter")
+                            .OrderByDescending(e => e.TimeGenerated)
+                            .Take(10)
+                            .ToList();
+
+                        if (entries.Any())
+                        {
+                            foreach (var entry in entries)
+                            {
+                                sleepEvents.Add($"[{entry.TimeGenerated:yyyy-MM-dd HH:mm:ss}] {entry.Message.Split('\n')[0]}");
+                            }
+                        }
+                        else
+                        {
+                            // Kernel-Power 이벤트로도 확인
+                            entries = eventLog.Entries.Cast<System.Diagnostics.EventLogEntry>()
+                                .Where(e => e.TimeGenerated >= sevenDaysAgo &&
+                                           e.Source == "Microsoft-Windows-Kernel-Power" &&
+                                           (e.InstanceId == 42 || e.InstanceId == 107))
+                                .OrderByDescending(e => e.TimeGenerated)
+                                .Take(5)
+                                .ToList();
+
+                            foreach (var entry in entries)
+                            {
+                                string eventType = entry.InstanceId == 42 ? "절전 진입" : "절전 해제";
+                                sleepEvents.Add($"[{entry.TimeGenerated:yyyy-MM-dd HH:mm:ss}] {eventType}");
+                            }
+                        }
+                    }
+
+                    if (sleepEvents.Any())
+                    {
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "이벤트 로그",
+                            Item = "절전 이벤트 (최근 7일)",
+                            Value = $"{sleepEvents.Count}건 발견"
+                        });
+
+                        int eventIndex = 0;
+                        foreach (var evt in sleepEvents.Take(5)) // 상위 5개만 표시
+                        {
+                            eventIndex++;
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "이벤트 로그",
+                                Item = $"  └ 이벤트 #{eventIndex}",
+                                Value = evt
+                            });
+                        }
+                    }
+                    else
+                    {
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "이벤트 로그",
+                            Item = "절전 이벤트 (최근 7일)",
+                            Value = "이벤트 없음"
+                        });
+                    }
+                }
+                catch (Exception sleepEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "이벤트 로그",
+                        Item = "절전 이벤트",
+                        Value = $"확인 불가: {sleepEx.Message}"
+                    });
+                }
+
+                // 블루스크린 이벤트 (최근 30일)
+                try
+                {
+                    var thirtyDaysAgo = DateTime.Now.AddDays(-30);
+                    var bsodEvents = new List<string>();
+
+                    using (var eventLog = new System.Diagnostics.EventLog("System"))
+                    {
+                        // BugCheck 이벤트 ID: 1001 (Source: BugCheck)
+                        // 또는 Event ID: 41 (Source: Kernel-Power) - 시스템 비정상 재부팅
+                        var entries = eventLog.Entries.Cast<System.Diagnostics.EventLogEntry>()
+                            .Where(e => e.TimeGenerated >= thirtyDaysAgo &&
+                                       ((e.InstanceId == 1001 && e.Source == "BugCheck") ||
+                                        (e.InstanceId == 41 && e.Source == "Microsoft-Windows-Kernel-Power" && e.EntryType == System.Diagnostics.EventLogEntryType.Error)))
+                            .OrderByDescending(e => e.TimeGenerated)
+                            .Take(10)
+                            .ToList();
+
+                        foreach (var entry in entries)
+                        {
+                            string eventDesc = entry.Source == "BugCheck" ? "블루스크린" : "비정상 종료";
+                            bsodEvents.Add($"[{entry.TimeGenerated:yyyy-MM-dd HH:mm:ss}] {eventDesc}");
+                        }
+                    }
+
+                    if (bsodEvents.Any())
+                    {
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "이벤트 로그",
+                            Item = "⚠ 블루스크린 (최근 30일)",
+                            Value = $"{bsodEvents.Count}건 발견"
+                        });
+
+                        int eventIndex = 0;
+                        foreach (var evt in bsodEvents.Take(5)) // 상위 5개만 표시
+                        {
+                            eventIndex++;
+                            items.Add(new SystemInfoItem
+                            {
+                                Category = "이벤트 로그",
+                                Item = $"  └ 이벤트 #{eventIndex}",
+                                Value = evt
+                            });
+                        }
+                    }
+                    else
+                    {
+                        items.Add(new SystemInfoItem
+                        {
+                            Category = "이벤트 로그",
+                            Item = "블루스크린 (최근 30일)",
+                            Value = "✓ 이벤트 없음"
+                        });
+                    }
+                }
+                catch (Exception bsodEx)
+                {
+                    items.Add(new SystemInfoItem
+                    {
+                        Category = "이벤트 로그",
+                        Item = "블루스크린 이벤트",
+                        Value = $"확인 불가: {bsodEx.Message}"
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                items.Add(new SystemInfoItem
+                {
+                    Category = "이벤트 로그",
                     Item = "오류",
                     Value = $"정보 수집 실패: {ex.Message}"
                 });
