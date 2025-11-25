@@ -2375,14 +2375,35 @@ namespace VmCompatibilityTool
 
                 var vbsRegistryKeys = new[]
                 {
+                    // CurrentControlSet - DeviceGuard
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 활성화"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequirePlatformSecurityFeatures", "플랫폼 보안 기능 요구"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequireMicrosoftSignedBootChain", "MS 서명 부트 체인 요구"),
+
+                    // ControlSet001 - DeviceGuard (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 활성화 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard", "RequirePlatformSecurityFeatures", "플랫폼 보안 기능 요구 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard", "RequireMicrosoftSignedBootChain", "MS 서명 부트 체인 요구 (ControlSet001)"),
+
+                    // HVCI
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", "HVCI 활성화"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "WasEnabledBy", "HVCI 활성화 주체"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", "HVCI 활성화 (ControlSet001)"),
+
+                    // SystemGuard
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", "시스템 가드 활성화"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", "시스템 가드 활성화 (ControlSet001)"),
+
+                    // CredentialGuard
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled", "Credential Guard 활성화"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled", "Credential Guard 활성화 (ControlSet001)"),
+
+                    // Policies
                     (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 정책 활성화"),
                     (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HypervisorEnforcedCodeIntegrity", "HVCI 정책"),
-                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIMATRequired", "HVCI MAT 필요")
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIEnabled", "HVCI 활성화 (정책)"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIMATRequired", "HVCI MAT 필요"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "ConfigureSystemGuardLaunch", "시스템 가드 시작 구성")
                 };
 
                 bool vbsEnabled = false;
@@ -3184,20 +3205,62 @@ namespace VmCompatibilityTool
                 // VBS 관련 레지스트리 설정
                 var vbsKeys = new[]
                 {
+                    // CurrentControlSet - DeviceGuard
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", 0),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequirePlatformSecurityFeatures", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequireMicrosoftSignedBootChain", 0),
+
+                    // ControlSet001 - DeviceGuard (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", 0),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard", "RequirePlatformSecurityFeatures", 0),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard", "RequireMicrosoftSignedBootChain", 0),
+
+                    // CurrentControlSet - HVCI
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", 0),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "WasEnabledBy", 0),
+
+                    // ControlSet001 - HVCI (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", 0),
+
+                    // CurrentControlSet - SystemGuard
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", 0),
+
+                    // ControlSet001 - SystemGuard (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", 0),
+
+                    // CurrentControlSet - CredentialGuard
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled", 0),
+
+                    // ControlSet001 - CredentialGuard (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled", 0),
+
+                    // CurrentControlSet - KeyGuard Status
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "CredGuardEnabled", 0),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyAvailable", 0),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyPersistent", 0),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "IsSecureKernelRunning", 0),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "KeyGuardEnabled", 0),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "LsaIsoLaunchAttempted", 0),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "SecretsMode", 0),
+
+                    // ControlSet001 - KeyGuard Status (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "CredGuardEnabled", 0),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyAvailable", 0),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyPersistent", 0),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "KeyGuardEnabled", 0),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "LsaIsoLaunchAttempted", 0),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "SecretsMode", 0),
+
+                    // SecureBiometrics
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SecureBiometrics", "Enabled", 0),
+
+                    // CurrentControlSet - LSA
                     (@"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlags", 0),
-                    (@"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlagsDefault", 0)
+                    (@"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlagsDefault", 0),
+
+                    // ControlSet001 - LSA (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\Lsa", "LsaCfgFlags", 0),
+                    (@"SYSTEM\ControlSet001\Control\Lsa", "LsaCfgFlagsDefault", 0)
                 };
 
                 foreach (var (keyPath, valueName, value) in vbsKeys)
@@ -3235,8 +3298,11 @@ namespace VmCompatibilityTool
                 {
                     (@"SYSTEM\CurrentControlSet\Control\CI\Config", "VulnerableDriverBlocklistEnable", 0),
                     (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "EnableVirtualizationBasedSecurity", 0),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "RequirePlatformSecurityFeatures", 0),
                     (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HypervisorEnforcedCodeIntegrity", 0),
-                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIMATRequired", 0)
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIEnabled", 0),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIMATRequired", 0),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "ConfigureSystemGuardLaunch", 0)
                 };
 
                 foreach (var (keyPath, valueName, value) in coreIsolationKeys)
@@ -4925,23 +4991,72 @@ namespace VmCompatibilityTool
 
                 var vbsRegistryKeys = new[]
                 {
+                    // CurrentControlSet - DeviceGuard
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 활성화"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequirePlatformSecurityFeatures", "플랫폼 보안 기능 요구"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequireMicrosoftSignedBootChain", "MS 서명 부트 체인 요구"),
+
+                    // ControlSet001 - DeviceGuard (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 활성화 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard", "RequirePlatformSecurityFeatures", "플랫폼 보안 기능 요구 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard", "RequireMicrosoftSignedBootChain", "MS 서명 부트 체인 요구 (ControlSet001)"),
+
+                    // CurrentControlSet - HVCI
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", "HVCI 활성화"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "WasEnabledBy", "HVCI 활성화 주체"),
+
+                    // ControlSet001 - HVCI (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled", "HVCI 활성화 (ControlSet001)"),
+
+                    // CurrentControlSet - SystemGuard
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", "시스템 가드 활성화"),
+
+                    // ControlSet001 - SystemGuard (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\SystemGuard", "Enabled", "시스템 가드 활성화 (ControlSet001)"),
+
+                    // CurrentControlSet - CredentialGuard
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled", "Credential Guard 활성화"),
+
+                    // ControlSet001 - CredentialGuard (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled", "Credential Guard 활성화 (ControlSet001)"),
+
+                    // CurrentControlSet - KeyGuard Status
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "CredGuardEnabled", "Credential Guard 활성화 상태"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyAvailable", "암호화 키 사용 가능"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyPersistent", "암호화 키 지속성"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "IsSecureKernelRunning", "보안 커널 실행 상태"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "KeyGuardEnabled", "Key Guard 활성화"),
+                    (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "LsaIsoLaunchAttempted", "LSA 격리 시작 시도"),
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\KeyGuard\Status", "SecretsMode", "비밀 모드"),
+
+                    // ControlSet001 - KeyGuard Status (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "CredGuardEnabled", "Credential Guard 활성화 상태 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyAvailable", "암호화 키 사용 가능 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "EncryptionKeyPersistent", "암호화 키 지속성 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "KeyGuardEnabled", "Key Guard 활성화 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "LsaIsoLaunchAttempted", "LSA 격리 시작 시도 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\KeyGuard\Status", "SecretsMode", "비밀 모드 (ControlSet001)"),
+
+                    // SecureBiometrics
                     (@"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\SecureBiometrics", "Enabled", "보안 생체 인식 활성화"),
+
+                    // CurrentControlSet - LSA
                     (@"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlags", "LSA 구성 플래그"),
                     (@"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlagsDefault", "LSA 기본 구성 플래그"),
+
+                    // ControlSet001 - LSA (Windows 25H2 대응)
+                    (@"SYSTEM\ControlSet001\Control\Lsa", "LsaCfgFlags", "LSA 구성 플래그 (ControlSet001)"),
+                    (@"SYSTEM\ControlSet001\Control\Lsa", "LsaCfgFlagsDefault", "LSA 기본 구성 플래그 (ControlSet001)"),
+
+                    // Policies
                     (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "EnableVirtualizationBasedSecurity", "VBS 정책 활성화"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "RequirePlatformSecurityFeatures", "플랫폼 보안 기능 요구 (정책)"),
                     (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HypervisorEnforcedCodeIntegrity", "정책 HVCI 활성화"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIEnabled", "HVCI 활성화 (정책)"),
                     (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIMATRequired", "HVCI MAT 요구"),
+                    (@"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "ConfigureSystemGuardLaunch", "시스템 가드 시작 구성"),
+
+                    // CI Config
                     (@"SYSTEM\CurrentControlSet\Control\CI\Config", "VulnerableDriverBlocklistEnable", "취약한 드라이버 차단")
                 };
 
