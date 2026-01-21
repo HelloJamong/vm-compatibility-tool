@@ -353,3 +353,6 @@ FodyWeavers.xsd
 
 # PowerShell scripts
 *.ps1
+
+# Migration documentation
+CPP_MIGRATION_PLAN.md
