@@ -545,3 +545,381 @@ Rust 구현 시 아래 C# 메서드를 1:1 참조:
 | Hyper-V Feature 목록 | `DisableHyperVFeatures()` L3040 (7개 Feature) |
 | 가상화 점검 → 필요 여부 판정 | `CheckIfHyperVNeedsDisabling()` 외 4개 L2912 |
 | 부팅 시간 수집 폴백 순서 | `GetBootTime()` L1563 (Environment 우선) |
+
+---
+
+## CI/CD 워크플로 설계
+
+### 버전 체계
+
+```
+Release-v26.04.03          ← 정식 릴리즈
+beta-v26.04.03.0001        ← 베타 (검증용)
+nightly-v26.04.03.0001     ← 나이틀리 (테스트용)
+         │  │  │  └── 빌드 번호 4자리 (GitHub run_number 자동 부여)
+         │  │  └──── 월 내 순번 (수동 관리)
+         │  └─────── 월 2자리
+         └────────── 연도 끝 2자리
+```
+
+**버전 관리 규칙:**
+- `CHANGELOG.md`가 **유일한 버전 소스** — 개발자가 수동 작성
+- CI는 CHANGELOG.md 최신 항목을 읽어 버전 추출 및 빌드에 주입
+- beta/nightly의 4자리 빌드 번호는 GitHub `run_number` 자동 부여
+- Cargo.toml semver 변환: `v26.04.03` → `26.4.3` (선행 0 제거)
+
+| 표시 버전 | Cargo.toml semver |
+|----------|------------------|
+| `Release-v26.04.03` | `26.4.3` |
+| `beta-v26.04.03.0001` | `26.4.3-beta.1` |
+| `nightly-v26.04.03.0001` | `26.4.3-nightly.1` |
+
+---
+
+### CHANGELOG.md 형식
+
+```markdown
+# Changelog
+
+## [Release-v26.04.03] - 2026-04-07
+### Added
+- 시스템 정보 수집 기능 추가
+### Fixed
+- VBS 레지스트리 비활성화 오류 수정
+
+---
+
+## [beta-v26.04.03.0002] - 2026-04-06
+### Fixed
+- Windows 25H2 환경에서 Hyper-V 감지 오류 수정
+
+---
+
+## [beta-v26.04.03.0001] - 2026-04-05
+### Added
+- 초기 베타 빌드
+```
+
+---
+
+### 파일 구조
+
+```
+.github/
+├── workflows/
+│   ├── nightly.yml          # dev 브랜치 push → artifact (3일 보관)
+│   ├── beta.yml             # beta 브랜치 push → GitHub Pre-release
+│   └── release.yml          # 수동 트리거 → 정식 GitHub Release
+└── scripts/
+    └── parse_version.py     # CHANGELOG.md 버전 파싱 공통 스크립트
+```
+
+---
+
+### parse_version.py
+
+```python
+# .github/scripts/parse_version.py
+import re, sys
+
+def parse_changelog(path="CHANGELOG.md"):
+    with open(path, encoding="utf-8") as f:
+        content = f.read()
+
+    pattern = r"## \[([^\]]+)\] - (\d{4}-\d{2}-\d{2})\n(.*?)(?=\n---|\n## \[|\Z)"
+    sections = re.findall(pattern, content, re.DOTALL)
+    if not sections:
+        sys.exit("CHANGELOG.md에서 버전을 찾을 수 없습니다")
+
+    version_str, date, body = sections[0]
+    return {
+        "display":  version_str,
+        "semver":   to_semver(version_str),
+        "date":     date,
+        "body":     body.strip(),
+        "type":     get_type(version_str),
+    }
+
+def to_semver(v):
+    patterns = [
+        (r"Release-v(\d+)\.(\d+)\.(\d+)$",
+         lambda m: f"{int(m[1])}.{int(m[2])}.{int(m[3])}"),
+        (r"beta-v(\d+)\.(\d+)\.(\d+)\.(\d+)$",
+         lambda m: f"{int(m[1])}.{int(m[2])}.{int(m[3])}-beta.{int(m[4])}"),
+        (r"nightly-v(\d+)\.(\d+)\.(\d+)\.(\d+)$",
+         lambda m: f"{int(m[1])}.{int(m[2])}.{int(m[3])}-nightly.{int(m[4])}"),
+    ]
+    for pattern, fmt in patterns:
+        m = re.match(pattern, v)
+        if m:
+            return fmt(m)
+    sys.exit(f"알 수 없는 버전 형식: {v}")
+
+def get_type(v):
+    if v.startswith("Release-"):  return "release"
+    if v.startswith("beta-"):     return "beta"
+    if v.startswith("nightly-"):  return "nightly"
+    return "unknown"
+
+if __name__ == "__main__":
+    info = parse_changelog()
+    with open(sys.argv[1], "a", encoding="utf-8") as f:
+        for k, v in info.items():
+            if "\n" in str(v):
+                f.write(f"{k}<<EOF\n{v}\nEOF\n")
+            else:
+                f.write(f"{k}={v}\n")
+```
+
+---
+
+### nightly.yml
+
+```yaml
+name: Nightly Build
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse CHANGELOG.md
+        id: ver
+        run: python .github/scripts/parse_version.py $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Inject version into Cargo.toml
+        shell: pwsh
+        run: |
+          (Get-Content src-tauri/Cargo.toml) `
+            -replace 'version = ".*"', 'version = "${{ steps.ver.outputs.semver }}"' |
+          Set-Content src-tauri/Cargo.toml
+
+      - name: Build portable EXE
+        run: npm run tauri build -- --bundles none
+        env:
+          TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
+
+      - name: Rename artifact
+        shell: pwsh
+        run: |
+          Copy-Item "src-tauri/target/release/VM Compatibility Tool.exe" `
+                    "VM-Compatibility-Tool-${{ steps.ver.outputs.display }}.exe"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nightly-${{ steps.ver.outputs.display }}-${{ github.sha }}
+          path: VM-Compatibility-Tool-*.exe
+          retention-days: 3
+```
+
+---
+
+### beta.yml
+
+```yaml
+name: Beta Build
+on:
+  push:
+    branches: [beta]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse CHANGELOG.md
+        id: ver
+        run: python .github/scripts/parse_version.py $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Validate beta version
+        shell: pwsh
+        run: |
+          if ("${{ steps.ver.outputs.type }}" -ne "beta") {
+            Write-Error "CHANGELOG.md 최신 항목이 beta 형식이 아닙니다: ${{ steps.ver.outputs.display }}"
+            exit 1
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Inject version into Cargo.toml
+        shell: pwsh
+        run: |
+          (Get-Content src-tauri/Cargo.toml) `
+            -replace 'version = ".*"', 'version = "${{ steps.ver.outputs.semver }}"' |
+          Set-Content src-tauri/Cargo.toml
+
+      - name: Build portable EXE
+        run: npm run tauri build -- --bundles none
+        env:
+          TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
+
+      - name: Rename artifact
+        shell: pwsh
+        run: |
+          Copy-Item "src-tauri/target/release/VM Compatibility Tool.exe" `
+                    "VM-Compatibility-Tool-${{ steps.ver.outputs.display }}.exe"
+
+      - name: Create Beta Pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.display }}
+          name: "${{ steps.ver.outputs.display }}"
+          prerelease: true
+          files: VM-Compatibility-Tool-*.exe
+          body: |
+            ## 베타 빌드
+
+            ${{ steps.ver.outputs.body }}
+
+            ---
+            > ⚠️ 이 빌드는 베타 버전입니다. 검증 목적으로만 사용하세요.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+---
+
+### release.yml
+
+```yaml
+name: Release Build
+on:
+  workflow_dispatch:   # 실수 방지를 위해 수동 트리거만 허용
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse CHANGELOG.md
+        id: ver
+        run: python .github/scripts/parse_version.py $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          if ("${{ steps.ver.outputs.type }}" -ne "release") {
+            Write-Error "CHANGELOG.md 최신 항목이 Release 형식이 아닙니다: ${{ steps.ver.outputs.display }}"
+            exit 1
+          }
+
+      - name: Check tag does not exist
+        shell: pwsh
+        run: |
+          git fetch --tags
+          $tag = "${{ steps.ver.outputs.display }}"
+          if (git tag -l $tag) {
+            Write-Error "태그 $tag 가 이미 존재합니다. 중복 배포를 방지합니다."
+            exit 1
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Inject version into Cargo.toml
+        shell: pwsh
+        run: |
+          (Get-Content src-tauri/Cargo.toml) `
+            -replace 'version = ".*"', 'version = "${{ steps.ver.outputs.semver }}"' |
+          Set-Content src-tauri/Cargo.toml
+
+      - name: Build portable EXE
+        run: npm run tauri build -- --bundles none
+        env:
+          TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
+
+      - name: Rename artifact
+        shell: pwsh
+        run: |
+          Copy-Item "src-tauri/target/release/VM Compatibility Tool.exe" `
+                    "VM-Compatibility-Tool-${{ steps.ver.outputs.display }}.exe"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.display }}
+          name: "${{ steps.ver.outputs.display }}"
+          prerelease: false
+          make_latest: true
+          files: VM-Compatibility-Tool-*.exe
+          body: |
+            ## 변경 사항
+
+            ${{ steps.ver.outputs.body }}
+
+            ---
+            📦 **사용 방법**: EXE 파일을 다운로드하여 관리자 권한으로 실행
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+---
+
+### 운영 절차
+
+```
+[Nightly]
+  1. dev 브랜치에 코드 push
+  2. Actions 자동 실행 → artifact 생성 (3일 보관)
+  3. Actions 탭에서 EXE 다운로드 후 테스트
+
+[Beta]
+  1. CHANGELOG.md 상단에 beta-v26.04.03.0001 섹션 작성
+  2. beta 브랜치에 push
+  3. Actions 자동 실행 → GitHub Pre-release 페이지 생성
+
+[Release]
+  1. CHANGELOG.md 상단에 Release-v26.04.03 섹션 작성 (변경 내용 포함)
+  2. GitHub Actions 탭 → release.yml → Run workflow
+  3. 정식 GitHub Release 생성 + EXE 첨부 + 태그 자동 생성
+
+[공통 주의]
+  - CHANGELOG.md에 해당 버전 항목 없으면 빌드 실패 (의도된 안전장치)
+  - 이미 존재하는 태그로 Release 시도 시 빌드 실패 (중복 배포 방지)
+  - Release 워크플로는 수동 트리거만 허용 (실수 방지)
+```
