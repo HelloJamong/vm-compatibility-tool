@@ -8,11 +8,9 @@ fn main() {
 
 #[cfg(target_os = "windows")]
 fn embed_manifest() {
-    // winresource로 매니페스트 임베드
-    // (winresource crate 추가 시 활성화)
-    // let mut res = winresource::WindowsResource::new();
-    // res.set_manifest(ADMIN_MANIFEST);
-    // res.compile().unwrap();
+    let mut res = winresource::WindowsResource::new();
+    res.set_manifest(ADMIN_MANIFEST);
+    res.compile().unwrap();
     println!("cargo:rerun-if-changed=build.rs");
 }
 

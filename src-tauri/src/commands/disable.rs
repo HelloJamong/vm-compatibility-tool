@@ -1,7 +1,7 @@
 /// 비활성화 실행 커맨드 — Phase 0 PoC (구조만, 실제 실행은 Phase 2에서 완성)
 
 use crate::models::virtualization::{DisableResult, ProgressEvent};
-use crate::services::{process_service, registry_service::windows as reg};
+use crate::services::{log_service, process_service, registry_service::windows as reg};
 use tauri::{AppHandle, Emitter};
 
 /// VBS 레지스트리 비활성화 대상 (C# DisableVBS() L3199 기반)
@@ -54,6 +54,8 @@ pub async fn execute_disable(
 }
 
 fn run_disable_tasks(app: &AppHandle, _selective: bool) -> anyhow::Result<Vec<DisableResult>> {
+    log_service::init();
+
     let tasks: Vec<(&str, fn() -> DisableResult)> = vec![
         ("Hyper-V 기능 비활성화", disable_hyperv),
         ("WSL 비활성화", disable_wsl),
@@ -74,6 +76,9 @@ fn run_disable_tasks(app: &AppHandle, _selective: bool) -> anyhow::Result<Vec<Di
         );
 
         let result = task_fn();
+        if !result.success {
+            log_service::log_error(label, &result.message);
+        }
         results.push(result);
     }
 
