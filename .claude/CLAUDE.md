@@ -1,5 +1,51 @@
 # VM Compatibility Tool — 프로젝트 컨텍스트 및 개선 플랜
 
+## 현재 진행 상태 (2026-04-07 기준)
+
+| Phase | 상태 | 브랜치 |
+|-------|------|--------|
+| Phase 0 — 환경 구성 및 PoC | ✅ 완료 | nightly |
+| Phase 1 — 데이터 모델 및 서비스 레이어 | ✅ 완료 | nightly |
+| Phase 2 — Rust 커맨드 구현 | ✅ 완료 (이벤트 로그 미구현) | nightly |
+| Phase 3 — Svelte 프론트엔드 | ✅ 완료 | nightly |
+| Phase 4 — 통합 및 예외 처리 | 🔄 일부 완료 | nightly |
+| Phase 5 — 빌드 파이프라인 | 🔄 일부 완료 | nightly |
+
+**현재 브랜치:** `nightly` — main에 아직 머지하지 않음  
+**다음 작업:** Phase 4 잔여 항목 (관리자 권한 체크, 에러 로그) → 실제 Windows 환경 검증 → beta 배포
+
+### 구현된 파일 목록 (Tauri v2)
+
+```
+src-tauri/src/
+├── commands/
+│   ├── system_info.rs   # get_app_version, get_system_info
+│   ├── virtualization.rs # get_virtualization_status
+│   ├── disable.rs        # execute_disable, request_reboot
+│   └── export.rs         # export_csv
+├── services/
+│   ├── wmi_service.rs    # Win32_Processor/ComputerSystem/OS/VideoController/BaseBoard/DiskDrive/PowerPlan + MSFT_PhysicalDisk
+│   ├── registry_service.rs # VBS/HVCI/CredGuard/LSA 읽기 + DWORD 쓰기 + OS 버전
+│   ├── process_service.rs  # dism, bcdedit, shutdown 래퍼
+│   └── disk_service.rs     # SSD/HDD 타입 감지
+└── models/
+    ├── system_info.rs    # SystemInfoItem
+    └── virtualization.rs # VirtualizationItem, DisableResult, ProgressEvent
+
+src/
+└── App.svelte            # 전체 UI (메뉴/시스템정보/가상화/비활성화 패널)
+```
+
+### CHANGELOG.md 버전 작성 규칙
+
+```
+## [nightly-vYY.MM.DD.빌드번호] - YYYY-MM-DD   ← nightly (dev/nightly 브랜치 push)
+## [beta-vYY.MM.DD.빌드번호] - YYYY-MM-DD      ← beta (beta 브랜치 push)
+## [Release-vYY.MM.DD] - YYYY-MM-DD            ← release (Actions 수동 트리거)
+```
+
+---
+
 ## 프로젝트 개요
 
 Windows OS 환경에서 VM(VMware, VirtualBox 등) 사용을 위해 시스템 호환성을 점검하고
@@ -412,98 +458,98 @@ export async function executeDisable(
 
 ### 마이그레이션 단계별 플랜
 
-#### Phase 0 — 환경 구성 및 PoC (1~2일)
+#### Phase 0 — 환경 구성 및 PoC ✅ 완료
 
-- [ ] Rust 툴체인 설치 (`rustup`, `cargo`)
-- [ ] Tauri CLI 설치 (`cargo install tauri-cli --version "^2"`)
-- [ ] Node.js + pnpm 설치
-- [ ] `create-tauri-app` 으로 스캐폴딩 (Svelte + TypeScript 템플릿)
-- [ ] `wmi` crate PoC: Win32_Processor WMI 쿼리 성공 확인
-- [ ] `winreg` crate PoC: DeviceGuard 레지스트리 읽기/쓰기 확인
-- [ ] 관리자 권한 manifest 빌드 확인
+- [x] Rust 툴체인 설치 (`rustup`, `cargo`)
+- [x] Tauri CLI 설치 (`cargo install tauri-cli --version "^2"`)
+- [x] Node.js 설치 + npm
+- [x] `create-tauri-app` 으로 스캐폴딩 (Svelte + TypeScript 템플릿)
+- [x] `wmi` crate PoC: Win32_Processor WMI 쿼리 성공 확인
+- [x] `winreg` crate PoC: DeviceGuard 레지스트리 읽기/쓰기 확인
+- [x] 관리자 권한 manifest 빌드 확인
+- [x] nightly GitHub Actions 빌드 성공 (windows-latest 러너에서 EXE 생성 확인)
 
-**검증 기준:** WMI 쿼리 결과가 C# 결과와 동일한지 확인
-
----
-
-#### Phase 1 — 데이터 모델 및 서비스 레이어 (3~5일)
-
-- [ ] `models/system_info.rs` — `SystemInfoItem` 구조체 (Serialize/Deserialize)
-- [ ] `models/virtualization.rs` — `VirtualizationItem`, `DisableResult` 구조체
-- [ ] `services/wmi_service.rs` — WMI 공통 연결 관리, 타임아웃 처리
-- [ ] `services/registry_service.rs` — 읽기/쓰기/CreateSubKey 래퍼
-- [ ] `services/process_service.rs` — dism, bcdedit, shutdown 실행 래퍼
-- [ ] `services/disk_service.rs` — SSD/HDD 타입 감지 (MSFT_PhysicalDisk 우선)
-
-**검증 기준:** 각 서비스 unit test 통과 (실제 Windows 환경에서 실행)
+**검증 완료:** nightly EXE 실행 확인 (2026-04-07)
 
 ---
 
-#### Phase 2 — Rust 커맨드 구현 (5~7일)
+#### Phase 1 — 데이터 모델 및 서비스 레이어 ✅ 완료
 
-- [ ] `commands/system_info.rs`
-  - `get_os_info()` — Registry 기반 OS 버전
-  - `get_cpu_info()` — WMI Win32_Processor
-  - `get_memory_info()` — WMI Win32_ComputerSystem + PerfRawData
-  - `get_disk_info()` — WMI + MSFT_PhysicalDisk
-  - `get_boot_info()` — WMI Win32_OperatingSystem LastBootUpTime
-  - `get_motherboard_info()` — WMI Win32_BaseBoard
-  - `get_gpu_info()` — WMI Win32_VideoController
-  - `get_power_info()` — WMI Win32_PowerPlan
-  - `get_event_log_summary()` — Windows EventLog API
-- [ ] `commands/virtualization.rs`
-  - `get_virtualization_status()` — 모든 가상화 항목 점검 통합
-- [ ] `commands/disable.rs`
-  - `execute_disable(selective: bool)` — 비활성화 실행 + 실시간 이벤트
-  - `check_disable_needed()` — 각 항목 비활성화 필요 여부
-- [ ] `commands/export.rs`
-  - `export_to_csv(data, filepath)` — UTF-8 BOM CSV 저장
-
-**검증 기준:** 각 커맨드를 Tauri dev 모드에서 호출하여 C# 기존 결과와 비교
+- [x] `models/system_info.rs` — `SystemInfoItem` 구조체 (Serialize/Deserialize)
+- [x] `models/virtualization.rs` — `VirtualizationItem`, `DisableResult`, `ProgressEvent` 구조체
+- [x] `services/wmi_service.rs` — WMI 공통 연결 관리 (root\cimv2, Storage, Power 네임스페이스)
+- [x] `services/registry_service.rs` — 읽기/쓰기/CreateSubKey 래퍼 + LSA 체크
+- [x] `services/process_service.rs` — dism, bcdedit, shutdown 실행 래퍼
+- [x] `services/disk_service.rs` — SSD/HDD 타입 감지 (MSFT_PhysicalDisk 우선, 모델명 키워드 폴백)
 
 ---
 
-#### Phase 3 — Svelte 프론트엔드 구현 (5~7일)
+#### Phase 2 — Rust 커맨드 구현 ✅ 완료 (이벤트 로그 제외)
 
-- [ ] `stores/ui.ts` — 현재 패널, 로딩 상태, 상태바 메시지
-- [ ] `stores/systemInfo.ts` — 시스템 정보 데이터 상태
-- [ ] `stores/virtualization.ts` — 점검 결과 + 완료 플래그
-- [ ] `lib/commands.ts` — 모든 invoke 타입 래퍼
-- [ ] `components/layout/Header.svelte` — 타이틀 바
-- [ ] `components/layout/StatusBar.svelte` — 하단 상태바 + 버전
-- [ ] `components/shared/DataTable.svelte` — 범용 테이블 (열 설정 props)
-- [ ] `components/shared/ProgressLog.svelte` — 실시간 로그 스크롤 영역
-- [ ] `components/shared/ConfirmDialog.svelte` — Yes/No/Cancel 다이얼로그
-- [ ] `components/panels/MenuPanel.svelte` — 3개 메인 버튼
-- [ ] `components/panels/SystemInfoPanel.svelte` — 수집 + DataTable + CSV 버튼
-- [ ] `components/panels/VirtualizationPanel.svelte` — 점검 + DataTable + CSV 버튼
-- [ ] `components/panels/DisablePanel.svelte` — 경고 + 실행 + ProgressLog
-- [ ] `App.svelte` — 패널 전환 라우팅 (store 기반)
+- [x] `commands/system_info.rs`
+  - `get_app_version()` — `TAURI_DISPLAY_VERSION` 환경변수 반환
+  - OS 정보 — Registry 기반 (25H2 빌드 번호 보정 포함)
+  - CPU 정보 — WMI Win32_Processor (VT-x/AMD-V 상태 포함)
+  - 메모리 — WMI Win32_ComputerSystem (총 용량) + Win32_OperatingSystem (가용 용량)
+  - 디스크 — WMI Win32_DiskDrive + MSFT_PhysicalDisk (SSD/HDD 타입 판별)
+  - 부팅 시간/가동 시간 — WMI Win32_OperatingSystem LastBootUpTime 파싱
+  - 메인보드 — WMI Win32_BaseBoard
+  - GPU/VRAM — WMI Win32_VideoController
+  - 전원 계획 — WMI Win32_PowerPlan (root\cimv2\power)
+  - [ ] `get_event_log_summary()` — 미구현 (windows-sys crate 추가 필요)
+- [x] `commands/virtualization.rs`
+  - 하드웨어 가상화 — WMI Win32_Processor.VirtualizationFirmwareEnabled
+  - Hyper-V 상태 — DISM (2개 Feature)
+  - WSL 상태 — DISM (2개 Feature)
+  - Hypervisor 시작 유형 — bcdedit /enum {current}
+  - VBS / HVCI / CredentialGuard — Registry
+  - LSA 보호 — Registry LsaCfgFlags
+- [x] `commands/disable.rs`
+  - `execute_disable(selective: bool)` — 비활성화 실행 + `disable-progress` 이벤트
+  - `request_reboot()` — shutdown /r /t 5
+  - VBS 레지스트리 10개 항목 (CurrentControlSet + ControlSet001 양쪽)
+  - 코어 격리 레지스트리 4개 항목
+  - Hyper-V Features 7개 + bcdedit off
+  - WSL Features 2개
+- [x] `commands/export.rs` — UTF-8 BOM CSV 저장 (system / virtualization 두 타입)
 
 ---
 
-#### Phase 4 — 통합 및 예외 처리 (3~4일)
+#### Phase 3 — Svelte 프론트엔드 구현 ✅ 완료 (단일 파일 구조)
 
-- [ ] 비활성화 실행 → 재부팅 다이얼로그 (Tauri dialog API)
+> 컴포넌트 분리 대신 `App.svelte` 단일 파일로 구현 (기능 동일)
+
+- [x] 메인 메뉴 패널 (3개 버튼)
+- [x] 시스템 정보 패널 — 테이블 + 새로고침 + CSV 내보내기
+- [x] 가상화 점검 패널 — 테이블 + 재점검 + CSV 내보내기 + 상태 색상 표시
+- [x] 비활성화 패널 — 경고 + 실행 + 실시간 progress 로그 + 재부팅 버튼
+- [x] 하단 상태바 — 현재 상태 메시지 + 버전 표시
+- [x] `disable-progress` Tauri 이벤트 실시간 수신 (listen)
+- [x] CSV 저장 다이얼로그 (`@tauri-apps/plugin-dialog` save)
+- [x] 버전 표시 — `get_app_version` invoke on mount
+
+---
+
+#### Phase 4 — 통합 및 예외 처리 (일부 완료)
+
+- [x] 비활성화 실행 → 재부팅 다이얼로그 (`window.confirm` + `request_reboot`)
+- [x] WMI 쿼리 실패 시 graceful fallback (항목별 "오류" 행 표시)
+- [x] Windows 25H2 ControlSet001 레지스트리 경로 처리 유지
+- [x] 버전 정보 자동 주입 (`TAURI_DISPLAY_VERSION` → `get_app_version` 커맨드)
 - [ ] 관리자 권한 없이 실행 시 안내 및 종료 처리
-- [ ] WMI 쿼리 실패 시 graceful fallback (항목별 "확인 불가" 표시)
-- [ ] Windows 25H2 ControlSet001 레지스트리 경로 처리 유지
 - [ ] 에러 로그 파일 저장 (`%TEMP%\VMCompatibilityTool\`)
-- [ ] 버전 정보 자동 주입 (`tauri.conf.json` → `package.version`)
 
 ---
 
-#### Phase 5 — 빌드 파이프라인 및 서명 (2~3일)
+#### Phase 5 — 빌드 파이프라인 (일부 완료)
 
-- [ ] `tauri build` 명령으로 단일 EXE 빌드 확인
-- [ ] `build.bat` Tauri 버전으로 재작성 (버전 입력 → `Cargo.toml` + `tauri.conf.json` 버전 동기화)
+- [x] `tauri build` 명령으로 단일 EXE 빌드 확인 (nightly 검증)
+- [x] GitHub Actions 워크플로 3종 완성 (nightly / beta / release)
+  - nightly: dev/nightly 브랜치 push → artifact 3일 보관
+  - beta: beta 브랜치 push → GitHub Pre-release
+  - release: 수동 트리거 → GitHub Release + 태그 중복 방지
+- [ ] `build.bat` Tauri 버전으로 재작성
 - [ ] `signtool.exe sign` 단계 통합 (인증서 보유 시)
-- [ ] GitHub Actions 워크플로 작성 (선택):
-  ```yaml
-  # .github/workflows/release.yml
-  # on: push tags v*
-  # jobs: build → sign → upload release asset
-  ```
 
 ---
 
