@@ -11,17 +11,15 @@ fn main() {
 /// 관리자 권한 확인 — 없으면 안내 메시지 후 종료
 #[cfg(windows)]
 fn check_admin_or_exit() {
-    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
     use windows_sys::Win32::Security::{
         GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
     };
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        MessageBoxW, MB_ICONERROR, MB_OK,
-    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
 
     let is_admin = unsafe {
-        let mut token = 0isize;
+        let mut token: HANDLE = std::ptr::null_mut();
         if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
             false
         } else {
@@ -49,7 +47,12 @@ fn check_admin_or_exit() {
         .encode_utf16()
         .collect();
         unsafe {
-            MessageBoxW(0, msg.as_ptr(), title.as_ptr(), MB_OK | MB_ICONERROR);
+            MessageBoxW(
+                std::ptr::null_mut(),
+                msg.as_ptr(),
+                title.as_ptr(),
+                MB_OK | MB_ICONERROR,
+            );
         }
         std::process::exit(1);
     }
