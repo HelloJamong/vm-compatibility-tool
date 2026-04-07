@@ -94,16 +94,19 @@ def write_github_output(info: dict, output_file: str) -> None:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
     if len(sys.argv) < 2:
-        print("사용법: python parse_version.py <GITHUB_OUTPUT_FILE>", file=sys.stderr)
+        print("Usage: python parse_version.py <GITHUB_OUTPUT_FILE>", file=sys.stderr)
         sys.exit(1)
 
     info = parse_changelog()
 
-    print(f"파싱된 버전: {info['display']}")
-    print(f"  semver:  {info['semver']}")
-    print(f"  타입:    {info['type']}")
-    print(f"  날짜:    {info['date']}")
+    print(f"display: {info['display']}")
+    print(f"semver:  {info['semver']}")
+    print(f"type:    {info['type']}")
+    print(f"date:    {info['date']}")
 
     write_github_output(info, sys.argv[1])
-    print("GitHub Output 작성 완료")
+    print("GitHub Output written.")
