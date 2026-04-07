@@ -1,0 +1,86 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1775534778777,
+  "projectRoot": "/home/dev/project/vm-compatibility-tool",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {},
+  "hotPaths": [
+    {
+      "path": "MainWindow.xaml.cs",
+      "accessCount": 9,
+      "lastAccessed": 1775534913976,
+      "type": "file"
+    },
+    {
+      "path": ".claude/CLAUDE.md",
+      "accessCount": 3,
+      "lastAccessed": 1775535641847,
+      "type": "file"
+    },
+    {
+      "path": "VmCompatibilityTool.csproj",
+      "accessCount": 1,
+      "lastAccessed": 1775534876288,
+      "type": "file"
+    },
+    {
+      "path": "MainWindow.xaml",
+      "accessCount": 1,
+      "lastAccessed": 1775534877012,
+      "type": "file"
+    },
+    {
+      "path": "app.manifest",
+      "accessCount": 1,
+      "lastAccessed": 1775534877217,
+      "type": "file"
+    },
+    {
+      "path": "App.xaml.cs",
+      "accessCount": 1,
+      "lastAccessed": 1775534881471,
+      "type": "file"
+    },
+    {
+      "path": "App.xaml",
+      "accessCount": 1,
+      "lastAccessed": 1775534881605,
+      "type": "file"
+    },
+    {
+      "path": ".claude/settings.local.json",
+      "accessCount": 1,
+      "lastAccessed": 1775535022377,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
