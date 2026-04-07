@@ -1,17 +1,5 @@
 fn main() {
-    // Windows 관리자 권한 manifest 임베드
-    #[cfg(target_os = "windows")]
-    embed_manifest();
-
     tauri_build::build()
-}
-
-#[cfg(target_os = "windows")]
-fn embed_manifest() {
-    let mut res = winresource::WindowsResource::new();
-    res.set_manifest(ADMIN_MANIFEST);
-    res.compile().unwrap();
-    println!("cargo:rerun-if-changed=build.rs");
 }
 
 #[allow(dead_code)]
