@@ -356,3 +356,5 @@ FodyWeavers.xsd
 
 # Migration documentation
 CPP_MIGRATION_PLAN.md
+
+.omc/
