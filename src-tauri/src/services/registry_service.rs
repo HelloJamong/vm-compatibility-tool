@@ -89,6 +89,14 @@ pub mod windows {
         }
     }
 
+    /// LSA 보호 설정 (LsaCfgFlags 값)
+    pub fn get_lsa_cfg_flags() -> u32 {
+        RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey(r"SYSTEM\CurrentControlSet\Control\Lsa")
+            .and_then(|k| k.get_value::<u32, _>("LsaCfgFlags"))
+            .unwrap_or(0)
+    }
+
     /// 레지스트리 DWORD 값 쓰기 (비활성화 작업용)
     pub fn set_dword(path: &str, name: &str, value: u32) -> anyhow::Result<()> {
         let (key, _) = RegKey::predef(HKEY_LOCAL_MACHINE)
@@ -128,6 +136,7 @@ pub mod windows {
     pub fn get_vbs_enabled() -> bool { false }
     pub fn get_hvci_enabled() -> bool { false }
     pub fn get_credential_guard_enabled() -> bool { false }
+    pub fn get_lsa_cfg_flags() -> u32 { 0 }
     pub fn set_dword(_path: &str, _name: &str, _value: u32) -> Result<()> {
         Err(anyhow::anyhow!("Windows 전용 기능입니다"))
     }

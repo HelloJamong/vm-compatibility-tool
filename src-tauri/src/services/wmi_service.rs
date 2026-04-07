@@ -1,15 +1,14 @@
 /// WMI 서비스 — Windows Management Instrumentation 쿼리 래퍼
 ///
-/// Phase 0 PoC: Win32_Processor, Win32_ComputerSystem, Win32_OperatingSystem
-///
 /// wmi crate는 COM 초기화가 필요하므로 반드시 tokio::task::spawn_blocking 내에서 호출
+
 #[cfg(windows)]
 pub mod windows {
     use anyhow::{Context, Result};
     use serde::Deserialize;
     use wmi::{COMLibrary, WMIConnection};
 
-    // ── WMI 구조체 정의 ────────────────────────────────────────────────────
+    // ── WMI 구조체 ─────────────────────────────────────────────────────────
 
     #[derive(Deserialize, Debug)]
     #[serde(rename = "Win32_Processor")]
@@ -70,7 +69,17 @@ pub mod windows {
         pub serial_number: Option<String>,
     }
 
-    // ── MSFT_PhysicalDisk (SSD/HDD 판별) ──────────────────────────────────
+    #[derive(Deserialize, Debug)]
+    #[serde(rename = "Win32_DiskDrive")]
+    pub struct Win32DiskDrive {
+        #[serde(rename = "Model")]
+        pub model: String,
+        #[serde(rename = "Size")]
+        pub size: Option<u64>,
+        #[serde(rename = "InterfaceType")]
+        pub interface_type: Option<String>,
+    }
+
     #[derive(Deserialize, Debug)]
     #[serde(rename = "MSFT_PhysicalDisk")]
     pub struct MsftPhysicalDisk {
@@ -82,13 +91,22 @@ pub mod windows {
         pub bus_type: Option<u16>,
     }
 
+    #[derive(Deserialize, Debug)]
+    #[serde(rename = "Win32_PowerPlan")]
+    pub struct Win32PowerPlan {
+        #[serde(rename = "ElementName")]
+        pub element_name: String,
+        #[serde(rename = "IsActive")]
+        pub is_active: Option<bool>,
+    }
+
     // ── WMI 연결 헬퍼 ─────────────────────────────────────────────────────
 
     /// 기본 WMI 연결 (root\cimv2)
     pub fn connect() -> Result<(COMLibrary, WMIConnection)> {
         let com = COMLibrary::new().context("COM 초기화 실패")?;
         let wmi = WMIConnection::new(com.into()).context("WMI 연결 실패")?;
-        Ok((com, wmi))  // NOTE: com은 wmi와 함께 drop되어야 함 — 같이 반환
+        Ok((com, wmi))
     }
 
     /// Storage 네임스페이스 WMI 연결 (MSFT_PhysicalDisk용)
@@ -102,21 +120,57 @@ pub mod windows {
         Ok((com, wmi))
     }
 
-    // ── Phase 0 PoC 검증 함수 ─────────────────────────────────────────────
-
-    /// [PoC] CPU 정보 조회 — WMI Win32_Processor
-    pub fn poc_get_cpu_info() -> Result<Vec<Win32Processor>> {
-        let (_com, wmi) = connect()?;
-        let processors: Vec<Win32Processor> = wmi.query().context("Win32_Processor 쿼리 실패")?;
-        Ok(processors)
+    /// Power 네임스페이스 WMI 연결 (Win32_PowerPlan용)
+    pub fn connect_power() -> Result<(COMLibrary, WMIConnection)> {
+        let com = COMLibrary::new().context("COM 초기화 실패")?;
+        let wmi = WMIConnection::with_namespace_path(
+            "root\\cimv2\\power",
+            com.into(),
+        )
+        .context("Power WMI 연결 실패")?;
+        Ok((com, wmi))
     }
 
-    /// [PoC] 메모리/시스템 정보 조회 — WMI Win32_ComputerSystem
+    // ── 쿼리 함수 ─────────────────────────────────────────────────────────
+
+    pub fn poc_get_cpu_info() -> Result<Vec<Win32Processor>> {
+        let (_com, wmi) = connect()?;
+        wmi.query().context("Win32_Processor 쿼리 실패")
+    }
+
     pub fn poc_get_system_info() -> Result<Vec<Win32ComputerSystem>> {
         let (_com, wmi) = connect()?;
-        let systems: Vec<Win32ComputerSystem> =
-            wmi.query().context("Win32_ComputerSystem 쿼리 실패")?;
-        Ok(systems)
+        wmi.query().context("Win32_ComputerSystem 쿼리 실패")
+    }
+
+    pub fn get_os_info() -> Result<Vec<Win32OperatingSystem>> {
+        let (_com, wmi) = connect()?;
+        wmi.query().context("Win32_OperatingSystem 쿼리 실패")
+    }
+
+    pub fn get_video_controllers() -> Result<Vec<Win32VideoController>> {
+        let (_com, wmi) = connect()?;
+        wmi.query().context("Win32_VideoController 쿼리 실패")
+    }
+
+    pub fn get_baseboard_info() -> Result<Vec<Win32BaseBoard>> {
+        let (_com, wmi) = connect()?;
+        wmi.query().context("Win32_BaseBoard 쿼리 실패")
+    }
+
+    pub fn get_disk_drives() -> Result<Vec<Win32DiskDrive>> {
+        let (_com, wmi) = connect()?;
+        wmi.query().context("Win32_DiskDrive 쿼리 실패")
+    }
+
+    pub fn get_msft_physical_disks() -> Result<Vec<MsftPhysicalDisk>> {
+        let (_com, wmi) = connect_storage()?;
+        wmi.query().context("MSFT_PhysicalDisk 쿼리 실패")
+    }
+
+    pub fn get_power_plans() -> Result<Vec<Win32PowerPlan>> {
+        let (_com, wmi) = connect_power()?;
+        wmi.query().context("Win32_PowerPlan 쿼리 실패")
     }
 }
 
@@ -130,6 +184,30 @@ pub mod windows {
     }
 
     pub fn poc_get_system_info() -> Result<Vec<()>> {
+        Err(anyhow::anyhow!("Windows 전용 기능입니다"))
+    }
+
+    pub fn get_os_info() -> Result<Vec<()>> {
+        Err(anyhow::anyhow!("Windows 전용 기능입니다"))
+    }
+
+    pub fn get_video_controllers() -> Result<Vec<()>> {
+        Err(anyhow::anyhow!("Windows 전용 기능입니다"))
+    }
+
+    pub fn get_baseboard_info() -> Result<Vec<()>> {
+        Err(anyhow::anyhow!("Windows 전용 기능입니다"))
+    }
+
+    pub fn get_disk_drives() -> Result<Vec<()>> {
+        Err(anyhow::anyhow!("Windows 전용 기능입니다"))
+    }
+
+    pub fn get_msft_physical_disks() -> Result<Vec<()>> {
+        Err(anyhow::anyhow!("Windows 전용 기능입니다"))
+    }
+
+    pub fn get_power_plans() -> Result<Vec<()>> {
         Err(anyhow::anyhow!("Windows 전용 기능입니다"))
     }
 }
