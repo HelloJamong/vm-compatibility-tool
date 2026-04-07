@@ -49,7 +49,7 @@ jobs:
         run: |
           $semver = "${{ steps.ver.outputs.semver }}"
           $content = Get-Content src-tauri/Cargo.toml -Raw
-          $content = $content -replace 'version = "[\d\.\-a-z]+"', "version = `"$semver`""
+          $content = [regex]::Replace($content, '(?m)^version = "[\d\.\-a-z]+"', "version = `"$semver`"")
           Set-Content src-tauri/Cargo.toml $content
 
       - name: Inject version into tauri.conf.json
