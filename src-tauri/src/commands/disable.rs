@@ -150,6 +150,16 @@ fn disable_vbs() -> DisableResult {
     }
 }
 
+#[tauri::command]
+pub fn request_reboot() -> Result<(), String> {
+    let result = process_service::schedule_reboot();
+    if result.success {
+        Ok(())
+    } else {
+        Err(format!("재부팅 명령 실패: {}", result.stderr))
+    }
+}
+
 fn disable_core_isolation() -> DisableResult {
     let mut messages = Vec::new();
     let mut success = true;

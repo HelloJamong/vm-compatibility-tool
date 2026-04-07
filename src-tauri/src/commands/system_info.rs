@@ -7,6 +7,13 @@ use crate::models::system_info::SystemInfoItem;
 use crate::services::registry_service::windows as reg;
 
 #[tauri::command]
+pub fn get_app_version() -> String {
+    option_env!("TAURI_DISPLAY_VERSION")
+        .unwrap_or("dev")
+        .to_string()
+}
+
+#[tauri::command]
 pub async fn get_system_info() -> Result<Vec<SystemInfoItem>, String> {
     tokio::task::spawn_blocking(collect_all_system_info)
         .await
