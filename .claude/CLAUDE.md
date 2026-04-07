@@ -8,32 +8,42 @@
 | Phase 1 — 데이터 모델 및 서비스 레이어 | ✅ 완료 | nightly |
 | Phase 2 — Rust 커맨드 구현 | ✅ 완료 (이벤트 로그 미구현) | nightly |
 | Phase 3 — Svelte 프론트엔드 | ✅ 완료 | nightly |
-| Phase 4 — 통합 및 예외 처리 | 🔄 일부 완료 | nightly |
-| Phase 5 — 빌드 파이프라인 | 🔄 일부 완료 | nightly |
+| Phase 4 — 통합 및 예외 처리 | ✅ 완료 | nightly |
+| Phase 5 — 빌드 파이프라인 | ✅ 완료 | nightly |
 
 **현재 브랜치:** `nightly` — main에 아직 머지하지 않음  
-**다음 작업:** Phase 4 잔여 항목 (관리자 권한 체크, 에러 로그) → 실제 Windows 환경 검증 → beta 배포
+**다음 작업:** 실제 Windows 환경 검증 → nightly 빌드 테스트 → beta 배포
+
+### 코드 서명 방침
+- 내부 사용자 대상 이슈조치 도구이므로 **서명 없이 배포**
+- SmartScreen 경고는 "추가 정보 → 실행"으로 통과 (내부 사용자 허용 범위)
+- GPO 관리 환경이 생기는 경우 자체 서명 + 인증서 배포 방식으로 전환 가능
+- `release.yml`에 `signtool.exe sign` 단계 자리는 주석으로 유지
 
 ### 구현된 파일 목록 (Tauri v2)
 
 ```
 src-tauri/src/
+├── main.rs               # 진입점 — 관리자 권한 체크 (TokenElevation + MessageBoxW)
 ├── commands/
-│   ├── system_info.rs   # get_app_version, get_system_info
+│   ├── system_info.rs    # get_app_version, get_system_info
 │   ├── virtualization.rs # get_virtualization_status
-│   ├── disable.rs        # execute_disable, request_reboot
+│   ├── disable.rs        # execute_disable, request_reboot (실패 시 log_service 연동)
 │   └── export.rs         # export_csv
 ├── services/
 │   ├── wmi_service.rs    # Win32_Processor/ComputerSystem/OS/VideoController/BaseBoard/DiskDrive/PowerPlan + MSFT_PhysicalDisk
 │   ├── registry_service.rs # VBS/HVCI/CredGuard/LSA 읽기 + DWORD 쓰기 + OS 버전
 │   ├── process_service.rs  # dism, bcdedit, shutdown 래퍼
-│   └── disk_service.rs     # SSD/HDD 타입 감지
+│   ├── disk_service.rs     # SSD/HDD 타입 감지
+│   └── log_service.rs      # 에러 로그 (%TEMP%\VMCompatibilityTool\error_YYYYMMDD.log)
 └── models/
     ├── system_info.rs    # SystemInfoItem
     └── virtualization.rs # VirtualizationItem, DisableResult, ProgressEvent
 
 src/
 └── App.svelte            # 전체 UI (메뉴/시스템정보/가상화/비활성화 패널)
+
+build.bat                 # Tauri 빌드 스크립트 (포터블 EXE / NSIS 선택)
 ```
 
 ### CHANGELOG.md 버전 작성 규칙
@@ -536,8 +546,8 @@ export async function executeDisable(
 - [x] WMI 쿼리 실패 시 graceful fallback (항목별 "오류" 행 표시)
 - [x] Windows 25H2 ControlSet001 레지스트리 경로 처리 유지
 - [x] 버전 정보 자동 주입 (`TAURI_DISPLAY_VERSION` → `get_app_version` 커맨드)
-- [ ] 관리자 권한 없이 실행 시 안내 및 종료 처리
-- [ ] 에러 로그 파일 저장 (`%TEMP%\VMCompatibilityTool\`)
+- [x] 관리자 권한 없이 실행 시 안내 및 종료 처리 (build.rs manifest + 런타임 TokenElevation 체크)
+- [x] 에러 로그 파일 저장 (`%TEMP%\VMCompatibilityTool\error_YYYYMMDD.log`)
 
 ---
 
@@ -548,8 +558,8 @@ export async function executeDisable(
   - nightly: dev/nightly 브랜치 push → artifact 3일 보관
   - beta: beta 브랜치 push → GitHub Pre-release
   - release: 수동 트리거 → GitHub Release + 태그 중복 방지
-- [ ] `build.bat` Tauri 버전으로 재작성
-- [ ] `signtool.exe sign` 단계 통합 (인증서 보유 시)
+- [x] `build.bat` Tauri 버전으로 재작성 (포터블 EXE / NSIS 선택)
+- [x] `signtool.exe sign` — 내부 사용 도구이므로 서명 없이 배포 (SmartScreen 경고는 허용 범위)
 
 ---
 
