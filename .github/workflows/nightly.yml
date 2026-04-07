@@ -1,0 +1,117 @@
+name: Nightly Build
+
+on:
+  push:
+    branches: [nightly, dev]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Windows Portable EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 버전 파싱 ─────────────────────────────────────────────────────────
+      - name: Parse version from CHANGELOG.md
+        id: ver
+        run: python .github/scripts/parse_version.py $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Print version info
+        shell: pwsh
+        run: |
+          echo "Display version : ${{ steps.ver.outputs.display }}"
+          echo "Semver          : ${{ steps.ver.outputs.semver }}"
+          echo "Type            : ${{ steps.ver.outputs.type }}"
+
+      # ── Node.js ──────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ── Rust ─────────────────────────────────────────────────────────────
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      # ── 프론트엔드 ─────────────────────────────────────────────────────────
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # ── 버전 주입 ─────────────────────────────────────────────────────────
+      - name: Inject version into Cargo.toml
+        shell: pwsh
+        run: |
+          $semver = "${{ steps.ver.outputs.semver }}"
+          $content = Get-Content src-tauri/Cargo.toml -Raw
+          $content = $content -replace 'version = "[\d\.\-a-z]+"', "version = `"$semver`""
+          Set-Content src-tauri/Cargo.toml $content
+          echo "Cargo.toml version updated to: $semver"
+
+      - name: Inject display version into tauri.conf.json
+        shell: pwsh
+        run: |
+          $display = "${{ steps.ver.outputs.display }}"
+          $semver = "${{ steps.ver.outputs.semver }}"
+          $conf = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $conf.version = $semver
+          $conf | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
+          echo "tauri.conf.json version updated to: $semver"
+
+      # ── 빌드 (포터블 EXE만) ───────────────────────────────────────────────
+      - name: Build Tauri portable EXE
+        run: npm run tauri build -- --bundles none
+        env:
+          TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 아티팩트 ─────────────────────────────────────────────────────────
+      - name: Rename EXE with version
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.display }}"
+          $src = Get-ChildItem "src-tauri/target/release/*.exe" |
+                 Where-Object { $_.Name -notlike "*build*" } |
+                 Select-Object -First 1
+          if ($src) {
+            $dst = "VM-Compatibility-Tool-${version}.exe"
+            Copy-Item $src.FullName $dst
+            echo "Renamed: $($src.Name) -> $dst"
+          } else {
+            Write-Error "EXE 파일을 찾을 수 없습니다"
+            exit 1
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ver.outputs.display }}-${{ github.sha }}
+          path: VM-Compatibility-Tool-*.exe
+          retention-days: 3
+          if-no-files-found: error
+
+      # ── 빌드 요약 ─────────────────────────────────────────────────────────
+      - name: Build summary
+        if: always()
+        shell: pwsh
+        run: |
+          echo "## Nightly Build 결과" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "| 항목 | 값 |" >> $env:GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $env:GITHUB_STEP_SUMMARY
+          echo "| 버전 | ${{ steps.ver.outputs.display }} |" >> $env:GITHUB_STEP_SUMMARY
+          echo "| 커밋 | ${{ github.sha }} |" >> $env:GITHUB_STEP_SUMMARY
+          echo "| 브랜치 | ${{ github.ref_name }} |" >> $env:GITHUB_STEP_SUMMARY
+          echo "| 보관 기간 | 3일 |" >> $env:GITHUB_STEP_SUMMARY

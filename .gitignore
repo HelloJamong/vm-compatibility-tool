@@ -358,3 +358,7 @@ FodyWeavers.xsd
 CPP_MIGRATION_PLAN.md
 
 .omc/
+
+# Rust / Tauri
+src-tauri/target/
+dist/

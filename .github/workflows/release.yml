@@ -1,0 +1,114 @@
+name: Release Build
+
+on:
+  workflow_dispatch:   # 실수 방지: 수동 트리거만 허용
+
+jobs:
+  build:
+    name: Build Official Release
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse version from CHANGELOG.md
+        id: ver
+        run: python .github/scripts/parse_version.py $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Validate release version format
+        shell: pwsh
+        run: |
+          $type = "${{ steps.ver.outputs.type }}"
+          if ($type -ne "release") {
+            Write-Error "CHANGELOG.md 최신 항목이 Release 형식이 아닙니다: ${{ steps.ver.outputs.display }}"
+            Write-Error "예시: ## [Release-v26.04.03] - 2026-04-07"
+            exit 1
+          }
+
+      - name: Check tag does not already exist
+        shell: pwsh
+        run: |
+          git fetch --tags
+          $tag = "${{ steps.ver.outputs.display }}"
+          $exists = git tag -l $tag
+          if ($exists) {
+            Write-Error "태그 '$tag' 가 이미 존재합니다. 중복 배포를 방지합니다."
+            Write-Error "CHANGELOG.md에서 버전을 올려주세요."
+            exit 1
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      - run: npm ci
+
+      - name: Inject version into Cargo.toml
+        shell: pwsh
+        run: |
+          $semver = "${{ steps.ver.outputs.semver }}"
+          $content = Get-Content src-tauri/Cargo.toml -Raw
+          $content = $content -replace 'version = "[\d\.\-a-z]+"', "version = `"$semver`""
+          Set-Content src-tauri/Cargo.toml $content
+
+      - name: Inject version into tauri.conf.json
+        shell: pwsh
+        run: |
+          $conf = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $conf.version = "${{ steps.ver.outputs.semver }}"
+          $conf | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
+
+      - name: Build Tauri portable EXE
+        run: npm run tauri build -- --bundles none
+        env:
+          TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rename EXE
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.display }}"
+          $src = Get-ChildItem "src-tauri/target/release/*.exe" |
+                 Where-Object { $_.Name -notlike "*build*" } |
+                 Select-Object -First 1
+          Copy-Item $src.FullName "VM-Compatibility-Tool-${version}.exe"
+
+      - name: Create official GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.display }}
+          name: "${{ steps.ver.outputs.display }}"
+          prerelease: false
+          make_latest: true
+          files: VM-Compatibility-Tool-*.exe
+          body: |
+            ## 변경 사항
+
+            ${{ steps.ver.outputs.body }}
+
+            ---
+            📦 **사용 방법**: EXE 파일을 다운로드하여 관리자 권한으로 실행하세요.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        shell: pwsh
+        run: |
+          echo "## ✅ Release 배포 완료" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "| 항목 | 값 |" >> $env:GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $env:GITHUB_STEP_SUMMARY
+          echo "| 버전 | ${{ steps.ver.outputs.display }} |" >> $env:GITHUB_STEP_SUMMARY
+          echo "| 날짜 | ${{ steps.ver.outputs.date }} |" >> $env:GITHUB_STEP_SUMMARY
+          echo "| 커밋 | ${{ github.sha }} |" >> $env:GITHUB_STEP_SUMMARY
