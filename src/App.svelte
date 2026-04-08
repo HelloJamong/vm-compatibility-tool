@@ -50,6 +50,7 @@
   let disableLog = $state<string[]>([]);
   let disableRunning = $state(false);
   let disableComplete = $state(false);
+  let rebootConfirmOpen = $state(false);
 
   onMount(async () => {
     try {
@@ -183,12 +184,14 @@
   }
 
   async function requestReboot() {
-    const ok = window.confirm(
-      "지금 재부팅하시겠습니까?\n\n확인을 클릭하면 5초 후 자동으로 재부팅됩니다."
-    );
-    if (!ok) return;
+    rebootConfirmOpen = true;
+  }
+
+  async function confirmReboot() {
     try {
       await invoke("request_reboot");
+      rebootConfirmOpen = false;
+      status = "재부팅 예약 완료";
     } catch (e) {
       status = `재부팅 오류: ${e}`;
     }
@@ -216,6 +219,24 @@
         .filter((item) => item.disable_group !== null && item.action_required)
         .map((item) => item.disable_group)
     ).size;
+  }
+
+  function actionItemCount(items: VirtItem[]): number {
+    return items.filter((item) => item.action_required).length;
+  }
+
+  function unknownItemCount(items: VirtItem[]): number {
+    return items.filter((item) => item.status.includes("확인 불가")).length;
+  }
+
+  function healthyItemCount(items: VirtItem[]): number {
+    return items.filter(
+      (item) => !item.action_required && !item.status.includes("확인 불가")
+    ).length;
+  }
+
+  function selectedTaskCount(opts: DisableOptions): number {
+    return [opts.hyperv, opts.wsl, opts.vbs, opts.core_isolation].filter(Boolean).length;
   }
 
   // 로그 라인 색상 클래스
@@ -274,29 +295,34 @@
 
         <button
           onclick={loadSystemInfo}
-          class="w-72 py-4 text-base font-bold bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow"
+          class="w-80 px-5 py-4 text-left bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow"
         >
-          🖥️ 시스템 사양 체크
+          <div class="text-base font-bold">🖥️ 시스템 사양 체크</div>
+          <div class="mt-1 text-xs text-blue-100">OS / CPU / 메모리 / 디스크 / 이벤트 로그 요약</div>
         </button>
 
         <button
           onclick={loadVirtStatus}
-          class="w-72 py-4 text-base font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors shadow"
+          class="w-80 px-5 py-4 text-left bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors shadow"
         >
-          🔍 가상화 설정 점검
-          {#if virtChecked}
-            {@const count = actionCount(virtItems)}
-            <span class="ml-2 text-xs font-normal px-2 py-0.5 rounded-full {count > 0 ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'}">
-              {count > 0 ? `${count}개 조치 필요` : "정상"}
-            </span>
-          {/if}
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-base font-bold">🔍 가상화 설정 점검</span>
+            {#if virtChecked}
+              {@const count = actionCount(virtItems)}
+              <span class="text-xs font-normal px-2 py-0.5 rounded-full {count > 0 ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'}">
+                {count > 0 ? `${count}개 조치 필요` : "정상"}
+              </span>
+            {/if}
+          </div>
+          <div class="mt-1 text-xs text-amber-100">Hyper-V / WSL / VBS / 코어 격리 상태 확인</div>
         </button>
 
         <button
           onclick={() => showPanel("disable")}
-          class="w-72 py-4 text-base font-bold bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors shadow"
+          class="w-80 px-5 py-4 text-left bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors shadow"
         >
-          ⚙️ VBS 및 Hyper-V 비활성화
+          <div class="text-base font-bold">⚙️ VBS 및 Hyper-V 비활성화</div>
+          <div class="mt-1 text-xs text-red-100">점검 결과를 기준으로 필요한 조치만 선택 실행</div>
         </button>
       </div>
 
@@ -384,6 +410,26 @@
             <span class="text-sm">가상화 설정 점검 중...</span>
           </div>
         {:else}
+          {#if virtItems.length > 0}
+            <div class="grid grid-cols-3 gap-3 shrink-0">
+              <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <div class="text-xs font-semibold text-red-700">조치 필요</div>
+                <div class="mt-1 text-2xl font-bold text-red-800">{actionItemCount(virtItems)}</div>
+                <div class="text-xs text-red-600">실제 항목 수</div>
+              </div>
+              <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                <div class="text-xs font-semibold text-green-700">정상/비활성</div>
+                <div class="mt-1 text-2xl font-bold text-green-800">{healthyItemCount(virtItems)}</div>
+                <div class="text-xs text-green-600">추가 조치 불필요</div>
+              </div>
+              <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                <div class="text-xs font-semibold text-slate-700">확인 불가</div>
+                <div class="mt-1 text-2xl font-bold text-slate-800">{unknownItemCount(virtItems)}</div>
+                <div class="text-xs text-slate-600">수동 확인 권장</div>
+              </div>
+            </div>
+          {/if}
+
           <div class="flex-1 overflow-auto rounded shadow-sm">
             <table class="w-full text-sm border-collapse bg-white">
               <thead class="bg-gray-100 sticky top-0 z-10">
@@ -422,7 +468,7 @@
               {count > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}">
               {#if count > 0}
                 <span class="text-amber-800 font-semibold">
-                  ⚠️ {count}개 항목이 VM 호환성에 영향을 줄 수 있습니다
+                  ⚠️ {count}개 작업 그룹에서 조치가 필요합니다
                 </span>
                 <button
                   onclick={() => showPanel("disable")}
@@ -461,7 +507,12 @@
         {#if virtChecked}
           {@const opts = computeDisableOptions(virtItems)}
           <div class="bg-blue-50 border border-blue-200 rounded p-3 shrink-0">
-            <p class="text-xs font-semibold text-blue-800 mb-2">점검 결과 기반 실행 예정 항목:</p>
+            <div class="flex items-center justify-between gap-3 mb-2">
+              <p class="text-xs font-semibold text-blue-800">점검 결과 기반 실행 예정 항목</p>
+              <span class="text-xs px-2 py-0.5 rounded-full {selectedTaskCount(opts) > 0 ? 'bg-blue-200 text-blue-900' : 'bg-gray-200 text-gray-600'}">
+                {selectedTaskCount(opts)}개 작업 선택
+              </span>
+            </div>
             <div class="grid grid-cols-2 gap-1.5">
               {#each [
                 { label: "Hyper-V 비활성화", on: opts.hyperv },
@@ -527,4 +578,35 @@
     <span>{status}</span>
     <span class="text-gray-400">{version}</span>
   </footer>
+
+  {#if rebootConfirmOpen}
+    <div class="absolute inset-0 bg-black/35 flex items-center justify-center p-4">
+      <div class="w-full max-w-md rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-200">
+          <h3 class="text-base font-bold text-gray-900">지금 재부팅할까요?</h3>
+          <p class="mt-1 text-sm text-gray-500">
+            확인을 누르면 5초 후 자동으로 재부팅됩니다.
+          </p>
+        </div>
+        <div class="px-5 py-4 text-sm text-gray-700 space-y-1">
+          <div>• 실행 중인 작업은 모두 저장하세요.</div>
+          <div>• 변경 사항 적용을 위해 시스템 재시작이 필요합니다.</div>
+        </div>
+        <div class="px-5 py-4 bg-gray-50 flex justify-end gap-2">
+          <button
+            onclick={() => (rebootConfirmOpen = false)}
+            class="px-4 py-2 text-sm rounded bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
+          >
+            취소
+          </button>
+          <button
+            onclick={confirmReboot}
+            class="px-4 py-2 text-sm rounded bg-slate-800 text-white hover:bg-slate-900"
+          >
+            재부팅 예약
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>

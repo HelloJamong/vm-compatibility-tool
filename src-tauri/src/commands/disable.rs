@@ -162,17 +162,33 @@ fn disable_registry_group(group: DisableGroup, task_name: &str) -> DisableResult
 
     for entry in registry_manifest::disable_write_entries(group) {
         let target_value = entry.target_value.unwrap_or(0);
-        match reg::set_dword(&entry.path, entry.value_name, target_value) {
-            Ok(_) => messages.push(format!(
-                "✓ {} — {}\\{} = {}",
-                entry.label, entry.path, entry.value_name, target_value
-            )),
-            Err(error) => {
+        match reg::get_dword(&entry.path, entry.value_name) {
+            Some(current_value) if current_value != target_value => {
+                match reg::set_dword(&entry.path, entry.value_name, target_value) {
+                    Ok(_) => messages.push(format!(
+                        "✓ {} — {}\\{}: {} → {}",
+                        entry.label, entry.path, entry.value_name, current_value, target_value
+                    )),
+                    Err(error) => {
+                        messages.push(format!(
+                            "✗ {} — {}\\{}: {}",
+                            entry.label, entry.path, entry.value_name, error
+                        ));
+                        success = false;
+                    }
+                }
+            }
+            Some(current_value) => {
                 messages.push(format!(
-                    "✗ {} — {}\\{}: {}",
-                    entry.label, entry.path, entry.value_name, error
+                    "- {} — {}\\{} = {} (이미 비활성 상태)",
+                    entry.label, entry.path, entry.value_name, current_value
                 ));
-                success = false;
+            }
+            None => {
+                messages.push(format!(
+                    "- {} — {}\\{} (값 없음, 생성하지 않음)",
+                    entry.label, entry.path, entry.value_name
+                ));
             }
         }
     }
