@@ -229,25 +229,6 @@
     return "text-green-300";
   }
 
-  function statusColor(statusText: string): string {
-    if (
-      statusText.includes("활성화됨") ||
-      statusText.includes("활성)") ||
-      statusText.includes("설치됨 (활성)")
-    ) {
-      return "text-red-600 font-semibold";
-    }
-    if (
-      statusText.includes("비활성") ||
-      statusText.includes("미설치") ||
-      statusText.includes("Off") ||
-      statusText.includes("지원됨")
-    ) {
-      return "text-green-600";
-    }
-    return "text-gray-700";
-  }
-
   function isCategoryStart(items: SystemInfoItem[], index: number): boolean {
     return index === 0 || items[index].category !== items[index - 1].category;
   }
@@ -290,7 +271,6 @@
         onReload={loadVirtStatus}
         onExport={exportVirtCsv}
         onShowDisable={() => showPanel("disable")}
-        {statusColor}
       />
     {:else if currentPanel === "disable"}
       <DisablePanel

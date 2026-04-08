@@ -1,4 +1,6 @@
 <script lang="ts">
+  import StatusBadge from "../common/StatusBadge.svelte";
+  import SummaryCard from "../common/SummaryCard.svelte";
   import type { VirtItem } from "../../lib/app-types";
 
   type Props = {
@@ -12,7 +14,6 @@
     onReload: () => void;
     onExport: () => void;
     onShowDisable: () => void;
-    statusColor: (status: string) => string;
   };
 
   let {
@@ -26,7 +27,6 @@
     onReload,
     onExport,
     onShowDisable,
-    statusColor,
   }: Props = $props();
 </script>
 
@@ -59,21 +59,9 @@
   {:else}
     {#if virtItems.length > 0}
       <div class="grid grid-cols-3 gap-3 shrink-0">
-        <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-          <div class="text-xs font-semibold text-red-700">조치 필요</div>
-          <div class="mt-1 text-2xl font-bold text-red-800">{actionItemTotal}</div>
-          <div class="text-xs text-red-600">실제 항목 수</div>
-        </div>
-        <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-          <div class="text-xs font-semibold text-green-700">정상/비활성</div>
-          <div class="mt-1 text-2xl font-bold text-green-800">{healthyItemTotal}</div>
-          <div class="text-xs text-green-600">추가 조치 불필요</div>
-        </div>
-        <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-          <div class="text-xs font-semibold text-slate-700">확인 불가</div>
-          <div class="mt-1 text-2xl font-bold text-slate-800">{unknownItemTotal}</div>
-          <div class="text-xs text-slate-600">수동 확인 권장</div>
-        </div>
+        <SummaryCard title="조치 필요" value={actionItemTotal} description="실제 항목 수" tone="danger" />
+        <SummaryCard title="정상/비활성" value={healthyItemTotal} description="추가 조치 불필요" tone="success" />
+        <SummaryCard title="확인 불가" value={unknownItemTotal} description="수동 확인 권장" tone="neutral" />
       </div>
     {/if}
 
@@ -93,7 +81,11 @@
             <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isReference ? 'hover:bg-slate-50' : item.recommendation ? 'hover:bg-red-50' : 'hover:bg-green-50'} transition-colors">
               <td class="px-3 py-2 border-b font-medium text-gray-800 text-xs">{item.category}</td>
               <td class="px-3 py-2 border-b">
-                <span class="text-xs {statusColor(item.status)}">{item.status}</span>
+                <StatusBadge
+                  label={item.status}
+                  tone={isReference ? "neutral" : item.status.includes("활성화됨") || item.status.includes("설치됨 (활성)") ? "danger" : "success"}
+                  className="font-medium"
+                />
               </td>
               <td class="px-3 py-2 border-b text-gray-500 text-xs">{item.details}</td>
               <td class="px-3 py-2 border-b text-xs">

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import StatusBadge from "../common/StatusBadge.svelte";
+
   type Props = {
     virtChecked: boolean;
     actionGroupCount: number;
@@ -34,9 +36,10 @@
     <div class="flex items-center justify-between gap-2">
       <span class="text-base font-bold">🔍 가상화 설정 점검</span>
       {#if virtChecked}
-        <span class="text-xs font-normal px-2 py-0.5 rounded-full {actionGroupCount > 0 ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'}">
-          {actionGroupCount > 0 ? `${actionGroupCount}개 조치 필요` : "정상"}
-        </span>
+        <StatusBadge
+          label={actionGroupCount > 0 ? `${actionGroupCount}개 조치 필요` : "정상"}
+          tone={actionGroupCount > 0 ? "danger" : "success"}
+        />
       {/if}
     </div>
     <div class="mt-1 text-xs text-amber-100">Hyper-V / WSL / VBS / 코어 격리 상태 확인</div>
