@@ -1,6 +1,6 @@
 # Changelog
 
-## [beta-v26.04.01.0002] - 2026-04-08
+## [beta-v26.04.01.0003] - 2026-04-08
 
 ### Added
 - `DisableOptions` 구조체 도입 — selective 비활성화 로직 구현
@@ -17,7 +17,9 @@
 
 ### Fixed
 - `execute_disable` 커맨드 시그니처 변경: `selective: bool` → `options: Option<DisableOptions>`
-- EXE 아이콘 검은 네모 문제: `bundle.active=false` 시 winresource로 직접 아이콘 임베딩
+- Beta/Nightly/Release 포터블 빌드 오류 수정: `--bundles none` → `--no-bundle`
+- EXE 아이콘 검은 네모 문제: `src-tauri/icons/icon.ico`를 멀티사이즈 ICO(16/24/32/48/64/128/256)로 재생성
+- 시스템 정보의 최근 오류/위험 메시지 한글 깨짐 수정: PowerShell 출력 인코딩을 UTF-8로 강제
 - 실행 시 "TaskDialogIndirect를 찾을 수 없습니다" 오류: manifest에 `Microsoft.Windows.Common-Controls v6` 의존성 추가
 
 ---
