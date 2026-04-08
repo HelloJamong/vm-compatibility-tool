@@ -362,3 +362,4 @@ CPP_MIGRATION_PLAN.md
 # Rust / Tauri
 src-tauri/target/
 dist/
+.omx/

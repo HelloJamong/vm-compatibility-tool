@@ -770,7 +770,7 @@ jobs:
           Set-Content src-tauri/Cargo.toml
 
       - name: Build portable EXE
-        run: npm run tauri build -- --bundles none
+        run: npm run tauri build -- --no-bundle
         env:
           TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
 
@@ -838,7 +838,7 @@ jobs:
           Set-Content src-tauri/Cargo.toml
 
       - name: Build portable EXE
-        run: npm run tauri build -- --bundles none
+        run: npm run tauri build -- --no-bundle
         env:
           TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
 
@@ -925,7 +925,7 @@ jobs:
           Set-Content src-tauri/Cargo.toml
 
       - name: Build portable EXE
-        run: npm run tauri build -- --bundles none
+        run: npm run tauri build -- --no-bundle
         env:
           TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
 

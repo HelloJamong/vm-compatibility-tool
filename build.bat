@@ -46,7 +46,7 @@ if "%build_type%"=="2" (
     npm run tauri build -- --bundles nsis
 ) else (
     echo 포터블 EXE 빌드 중...
-    npm run tauri build -- --bundles none
+    npm run tauri build -- --no-bundle
 )
 
 set BUILD_RESULT=%ERRORLEVEL%
