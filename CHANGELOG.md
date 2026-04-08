@@ -1,5 +1,33 @@
 # Changelog
 
+## [beta-v26.04.01.0004] - 2026-04-08
+
+### Added
+- 공용 레지스트리 manifest 도입 (`registry_manifest.rs`)
+  - VBS / 코어 격리 레지스트리 항목을 `DisableWrite` / `InspectOnly` / `ExcludedLegacy`로 분류
+  - 점검/조치가 같은 source of truth를 공유하도록 정리
+- Windows 수동 QA 체크리스트 추가 (`docs/windows-manual-qa-checklist.md`)
+- GUI 공통 컴포넌트 추가
+  - `StatusBadge`, `SummaryCard`, `ConfirmDialog`
+  - 메뉴/가상화 점검/비활성화 패널 컴포넌트 분리
+
+### Changed
+- 레지스트리 비활성화 정책 정리
+  - 값이 없는 레지스트리는 생성하지 않음
+  - 실제로 존재하고 활성 상태인 값만 `0`으로 변경
+- 가상화 점검 결과에 structured metadata 추가
+  - `disable_group`, `action_required`, `manifest_id`, `source_type`
+- `App.svelte`를 오케스트레이션 셸로 단순화하고 UI를 컴포넌트 중심 구조로 재편
+- README 및 `.claude/CLAUDE.md`를 현재 Tauri/Rust/Svelte 기준으로 재작성
+
+### Fixed
+- selective 비활성화가 표시 문자열 매칭에 의존하던 구조 제거
+- reference-only legacy 레지스트리 항목을 자동 조치 없이 점검 결과에 다시 노출
+- 재부팅 흐름을 브라우저 `window.confirm` 대신 인앱 확인 다이얼로그로 개선
+- 저장소 루트의 obsolete WPF/C# 유산 및 과도한 Visual Studio 중심 `.gitignore` 정리
+
+---
+
 ## [beta-v26.04.01.0003] - 2026-04-08
 
 ### Added
