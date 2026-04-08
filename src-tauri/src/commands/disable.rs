@@ -1,30 +1,9 @@
 /// 비활성화 실행 커맨드
-
-use crate::models::virtualization::{DisableOptions, DisableResult, ProgressEvent};
-use crate::services::{log_service, process_service, registry_service::windows as reg};
+use crate::models::virtualization::{DisableGroup, DisableOptions, DisableResult, ProgressEvent};
+use crate::services::{
+    log_service, process_service, registry_manifest, registry_service::windows as reg,
+};
 use tauri::{AppHandle, Emitter};
-
-/// VBS 레지스트리 비활성화 대상 (C# DisableVBS() L3199 기반)
-const VBS_REGISTRY_KEYS: &[(&str, &str)] = &[
-    (r"SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity"),
-    (r"SYSTEM\CurrentControlSet\Control\DeviceGuard", "RequirePlatformSecurityFeatures"),
-    (r"SYSTEM\ControlSet001\Control\DeviceGuard", "EnableVirtualizationBasedSecurity"),
-    (r"SYSTEM\ControlSet001\Control\DeviceGuard", "RequirePlatformSecurityFeatures"),
-    (r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled"),
-    (r"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled"),
-    (r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled"),
-    (r"SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\CredentialGuard", "Enabled"),
-    (r"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlags"),
-    (r"SYSTEM\ControlSet001\Control\Lsa", "LsaCfgFlags"),
-];
-
-/// 코어 격리 레지스트리 비활성화 대상 (C# DisableCoreIsolation() L3290 기반)
-const CORE_ISOLATION_KEYS: &[(&str, &str)] = &[
-    (r"SYSTEM\CurrentControlSet\Control\CI\Config", "VulnerableDriverBlocklistEnable"),
-    (r"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "EnableVirtualizationBasedSecurity"),
-    (r"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HypervisorEnforcedCodeIntegrity"),
-    (r"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard", "HVCIEnabled"),
-];
 
 /// Hyper-V 비활성화 대상 Feature 목록 (C# DisableHyperVFeatures() L3040 기반)
 const HYPERV_FEATURES: &[&str] = &[
@@ -61,7 +40,6 @@ pub async fn execute_disable(
 fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Vec<DisableResult>> {
     log_service::init();
 
-    // 실행할 태스크만 수집
     type TaskFn = fn() -> DisableResult;
     let mut tasks: Vec<(&str, TaskFn)> = Vec::new();
 
@@ -94,12 +72,16 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Ve
 
         let _ = app.emit(
             "disable-progress",
-            ProgressEvent { step, total, message: label.to_string(), success: true },
+            ProgressEvent {
+                step,
+                total,
+                message: label.to_string(),
+                success: true,
+            },
         );
 
         let result = task_fn();
 
-        // 실패 시 이벤트 재전송 + 로그 기록
         if !result.success {
             let _ = app.emit(
                 "disable-progress",
@@ -167,42 +149,36 @@ fn disable_wsl() -> DisableResult {
 }
 
 fn disable_vbs() -> DisableResult {
-    let mut messages = Vec::new();
-    let mut success = true;
-
-    for (path, name) in VBS_REGISTRY_KEYS {
-        match reg::set_dword(path, name, 0) {
-            Ok(_) => messages.push(format!("✓ {}\\{} = 0", path, name)),
-            Err(e) => {
-                messages.push(format!("✗ {}\\{}: {}", path, name, e));
-                success = false;
-            }
-        }
-    }
-
-    DisableResult {
-        task: "VBS 비활성화".to_string(),
-        success,
-        message: messages.join("\n"),
-    }
+    disable_registry_group(DisableGroup::Vbs, "VBS 비활성화")
 }
 
 fn disable_core_isolation() -> DisableResult {
+    disable_registry_group(DisableGroup::CoreIsolation, "코어 격리 비활성화")
+}
+
+fn disable_registry_group(group: DisableGroup, task_name: &str) -> DisableResult {
     let mut messages = Vec::new();
     let mut success = true;
 
-    for (path, name) in CORE_ISOLATION_KEYS {
-        match reg::set_dword(path, name, 0) {
-            Ok(_) => messages.push(format!("✓ {}\\{} = 0", path, name)),
-            Err(e) => {
-                messages.push(format!("✗ {}\\{}: {}", path, name, e));
+    for entry in registry_manifest::disable_write_entries(group) {
+        let target_value = entry.target_value.unwrap_or(0);
+        match reg::set_dword(&entry.path, entry.value_name, target_value) {
+            Ok(_) => messages.push(format!(
+                "✓ {} — {}\\{} = {}",
+                entry.label, entry.path, entry.value_name, target_value
+            )),
+            Err(error) => {
+                messages.push(format!(
+                    "✗ {} — {}\\{}: {}",
+                    entry.label, entry.path, entry.value_name, error
+                ));
                 success = false;
             }
         }
     }
 
     DisableResult {
-        task: "코어 격리 비활성화".to_string(),
+        task: task_name.to_string(),
         success,
         message: messages.join("\n"),
     }

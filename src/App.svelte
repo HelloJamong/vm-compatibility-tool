@@ -6,11 +6,17 @@
 
   type Panel = "menu" | "systemInfo" | "virtualization" | "disable";
   type SystemInfoItem = { category: string; item: string; value: string };
+  type DisableGroup = "hyperv" | "wsl" | "vbs" | "core_isolation";
+  type VirtSource = "unknown" | "wmi" | "feature" | "bcd" | "registry";
   type VirtItem = {
     category: string;
     status: string;
     details: string;
     recommendation: string;
+    disable_group: DisableGroup | null;
+    source_type: VirtSource;
+    action_required: boolean;
+    manifest_id: string | null;
   };
   type DisableResult = { task: string; success: boolean; message: string };
   type ProgressEvent = {
@@ -191,34 +197,25 @@
   // ── 헬퍼 함수 ────────────────────────────────────────────────────────
 
   function computeDisableOptions(items: VirtItem[]): DisableOptions {
-    const find = (cat: string) => items.find((i) => i.category === cat);
-    const isActive = (item: VirtItem | undefined) =>
-      item !== undefined &&
-      (item.status.includes("활성화됨") || item.status.includes("설치됨 (활성)"));
-
-    const hypervActive =
-      isActive(find("Hyper-V (전체)")) || isActive(find("Hyper-V 하이퍼바이저"));
-
-    const hypervisorLaunch = find("Hypervisor 시작 유형");
-    const hypervisorActive =
-      hypervisorLaunch !== undefined &&
-      !hypervisorLaunch.status.toLowerCase().includes("off") &&
-      hypervisorLaunch.status !== "확인 불가";
-
     return {
-      hyperv: hypervActive || hypervisorActive,
-      wsl: isActive(find("WSL")) || isActive(find("가상 머신 플랫폼 (WSL2)")),
-      vbs:
-        isActive(find("VBS (가상화 기반 보안)")) ||
-        isActive(find("CredentialGuard")) ||
-        isActive(find("LSA 보호")),
-      core_isolation: isActive(find("HVCI (코어 격리)")),
+      hyperv: hasActionForGroup(items, "hyperv"),
+      wsl: hasActionForGroup(items, "wsl"),
+      vbs: hasActionForGroup(items, "vbs"),
+      core_isolation: hasActionForGroup(items, "core_isolation"),
     };
   }
 
-  // 비활성화 필요 항목 수 (recommendation이 있는 행)
+  function hasActionForGroup(items: VirtItem[], group: DisableGroup): boolean {
+    return items.some((item) => item.disable_group === group && item.action_required);
+  }
+
+  // 비활성화 필요 그룹 수
   function actionCount(items: VirtItem[]): number {
-    return items.filter((i) => i.recommendation.length > 0).length;
+    return new Set(
+      items
+        .filter((item) => item.disable_group !== null && item.action_required)
+        .map((item) => item.disable_group)
+    ).size;
   }
 
   // 로그 라인 색상 클래스

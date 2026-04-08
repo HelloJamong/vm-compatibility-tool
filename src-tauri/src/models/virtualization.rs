@@ -1,5 +1,35 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum DisableGroup {
+    Hyperv,
+    Wsl,
+    Vbs,
+    CoreIsolation,
+}
+
+impl DisableGroup {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Hyperv => "hyperv",
+            Self::Wsl => "wsl",
+            Self::Vbs => "vbs",
+            Self::CoreIsolation => "core_isolation",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VirtualizationSource {
+    Unknown,
+    Wmi,
+    Feature,
+    Bcd,
+    Registry,
+}
+
 /// 가상화 점검 테이블 행
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VirtualizationItem {
@@ -7,6 +37,10 @@ pub struct VirtualizationItem {
     pub status: String,
     pub details: String,
     pub recommendation: String,
+    pub disable_group: Option<DisableGroup>,
+    pub source_type: VirtualizationSource,
+    pub action_required: bool,
+    pub manifest_id: Option<String>,
 }
 
 impl VirtualizationItem {
@@ -16,7 +50,31 @@ impl VirtualizationItem {
             status: status.to_string(),
             details: details.to_string(),
             recommendation: recommendation.to_string(),
+            disable_group: None,
+            source_type: VirtualizationSource::Unknown,
+            action_required: false,
+            manifest_id: None,
         }
+    }
+
+    pub fn with_disable_group(
+        mut self,
+        disable_group: DisableGroup,
+        action_required: bool,
+    ) -> Self {
+        self.disable_group = Some(disable_group);
+        self.action_required = action_required;
+        self
+    }
+
+    pub fn with_source(mut self, source_type: VirtualizationSource) -> Self {
+        self.source_type = source_type;
+        self
+    }
+
+    pub fn with_manifest_id(mut self, manifest_id: &str) -> Self {
+        self.manifest_id = Some(manifest_id.to_string());
+        self
     }
 }
 
@@ -51,7 +109,12 @@ pub struct DisableOptions {
 
 impl DisableOptions {
     pub fn all() -> Self {
-        Self { hyperv: true, wsl: true, vbs: true, core_isolation: true }
+        Self {
+            hyperv: true,
+            wsl: true,
+            vbs: true,
+            core_isolation: true,
+        }
     }
 
     /// 하나라도 실행 대상이 있는지 확인
