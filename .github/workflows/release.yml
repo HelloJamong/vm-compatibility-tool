@@ -73,7 +73,7 @@ jobs:
           $conf | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
 
       - name: Build Tauri portable EXE
-        run: npm run tauri build
+        run: npm run tauri build -- --bundles none
         env:
           TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
