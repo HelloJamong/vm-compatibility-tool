@@ -1,6 +1,6 @@
-/// 비활성화 실행 커맨드 — Phase 0 PoC (구조만, 실제 실행은 Phase 2에서 완성)
+/// 비활성화 실행 커맨드
 
-use crate::models::virtualization::{DisableResult, ProgressEvent};
+use crate::models::virtualization::{DisableOptions, DisableResult, ProgressEvent};
 use crate::services::{log_service, process_service, registry_service::windows as reg};
 use tauri::{AppHandle, Emitter};
 
@@ -42,26 +42,49 @@ const WSL_FEATURES: &[&str] = &[
     "VirtualMachinePlatform",
 ];
 
+/// 비활성화 실행
+///
+/// - `options`: None이면 전체 실행, Some이면 가상화 점검 결과 기반 선택 실행
 #[tauri::command]
 pub async fn execute_disable(
     app: AppHandle,
-    selective: bool,
+    options: Option<DisableOptions>,
 ) -> Result<Vec<DisableResult>, String> {
-    tokio::task::spawn_blocking(move || run_disable_tasks(&app, selective))
-        .await
-        .map_err(|e| format!("작업 실행 오류: {e}"))?
-        .map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || {
+        run_disable_tasks(&app, options.unwrap_or_else(DisableOptions::all))
+    })
+    .await
+    .map_err(|e| format!("작업 실행 오류: {e}"))?
+    .map_err(|e| e.to_string())
 }
 
-fn run_disable_tasks(app: &AppHandle, _selective: bool) -> anyhow::Result<Vec<DisableResult>> {
+fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Vec<DisableResult>> {
     log_service::init();
 
-    let tasks: Vec<(&str, fn() -> DisableResult)> = vec![
-        ("Hyper-V 기능 비활성화", disable_hyperv),
-        ("WSL 비활성화", disable_wsl),
-        ("VBS 레지스트리 비활성화", disable_vbs),
-        ("코어 격리 비활성화", disable_core_isolation),
-    ];
+    // 실행할 태스크만 수집
+    type TaskFn = fn() -> DisableResult;
+    let mut tasks: Vec<(&str, TaskFn)> = Vec::new();
+
+    if opts.hyperv {
+        tasks.push(("Hyper-V 기능 비활성화", disable_hyperv));
+    }
+    if opts.wsl {
+        tasks.push(("WSL 비활성화", disable_wsl));
+    }
+    if opts.vbs {
+        tasks.push(("VBS 레지스트리 비활성화", disable_vbs));
+    }
+    if opts.core_isolation {
+        tasks.push(("코어 격리 비활성화", disable_core_isolation));
+    }
+
+    if tasks.is_empty() {
+        return Ok(vec![DisableResult {
+            task: "점검 결과".to_string(),
+            success: true,
+            message: "비활성화가 필요한 항목이 없습니다.".to_string(),
+        }]);
+    }
 
     let total = tasks.len() as u32;
     let mut results = Vec::new();
@@ -69,16 +92,27 @@ fn run_disable_tasks(app: &AppHandle, _selective: bool) -> anyhow::Result<Vec<Di
     for (i, (label, task_fn)) in tasks.into_iter().enumerate() {
         let step = i as u32 + 1;
 
-        // 진행 상태 이벤트 전송
         let _ = app.emit(
             "disable-progress",
             ProgressEvent { step, total, message: label.to_string(), success: true },
         );
 
         let result = task_fn();
+
+        // 실패 시 이벤트 재전송 + 로그 기록
         if !result.success {
+            let _ = app.emit(
+                "disable-progress",
+                ProgressEvent {
+                    step,
+                    total,
+                    message: format!("{label} — 일부 실패"),
+                    success: false,
+                },
+            );
             log_service::log_error(label, &result.message);
         }
+
         results.push(result);
     }
 
@@ -95,11 +129,9 @@ fn disable_hyperv() -> DisableResult {
             messages.push(format!("✓ {feature}"));
         } else {
             messages.push(format!("- {feature} (이미 비활성화됨)"));
-            // exit code != 0 이어도 "이미 비활성화" 상태일 수 있어 실패로 처리 안 함
         }
     }
 
-    // bcdedit hypervisorlaunchtype off
     let bcd = process_service::disable_hypervisor_launch();
     if bcd.success {
         messages.push("✓ hypervisorlaunchtype off".to_string());
@@ -155,16 +187,6 @@ fn disable_vbs() -> DisableResult {
     }
 }
 
-#[tauri::command]
-pub fn request_reboot() -> Result<(), String> {
-    let result = process_service::schedule_reboot();
-    if result.success {
-        Ok(())
-    } else {
-        Err(format!("재부팅 명령 실패: {}", result.stderr))
-    }
-}
-
 fn disable_core_isolation() -> DisableResult {
     let mut messages = Vec::new();
     let mut success = true;
@@ -183,5 +205,15 @@ fn disable_core_isolation() -> DisableResult {
         task: "코어 격리 비활성화".to_string(),
         success,
         message: messages.join("\n"),
+    }
+}
+
+#[tauri::command]
+pub fn request_reboot() -> Result<(), String> {
+    let result = process_service::schedule_reboot();
+    if result.success {
+        Ok(())
+    } else {
+        Err(format!("재부팅 명령 실패: {}", result.stderr))
     }
 }

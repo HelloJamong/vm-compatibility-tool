@@ -4,7 +4,7 @@
 /// WMI + Registry 양쪽 수집
 
 use crate::models::system_info::SystemInfoItem;
-use crate::services::registry_service::windows as reg;
+use crate::services::{event_log_service, registry_service::windows as reg};
 
 #[tauri::command]
 pub fn get_app_version() -> String {
@@ -32,6 +32,7 @@ fn collect_all_system_info() -> anyhow::Result<Vec<SystemInfoItem>> {
     collect_motherboard_info(&mut items);
     collect_gpu_info(&mut items);
     collect_power_info(&mut items);
+    event_log_service::collect_event_log_info(&mut items);
 
     Ok(items)
 }

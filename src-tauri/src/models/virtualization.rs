@@ -36,3 +36,26 @@ pub struct ProgressEvent {
     pub message: String,
     pub success: bool,
 }
+
+/// 비활성화 옵션 — selective 모드에서 필요한 항목만 실행
+///
+/// 프론트엔드가 가상화 점검 결과를 기반으로 계산하여 전달.
+/// None이면 모든 항목 실행 (전체 모드).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisableOptions {
+    pub hyperv: bool,
+    pub wsl: bool,
+    pub vbs: bool,
+    pub core_isolation: bool,
+}
+
+impl DisableOptions {
+    pub fn all() -> Self {
+        Self { hyperv: true, wsl: true, vbs: true, core_isolation: true }
+    }
+
+    /// 하나라도 실행 대상이 있는지 확인
+    pub fn any(&self) -> bool {
+        self.hyperv || self.wsl || self.vbs || self.core_isolation
+    }
+}

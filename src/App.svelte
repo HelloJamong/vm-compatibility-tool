@@ -19,6 +19,12 @@
     message: string;
     success: boolean;
   };
+  type DisableOptions = {
+    hyperv: boolean;
+    wsl: boolean;
+    vbs: boolean;
+    core_isolation: boolean;
+  };
 
   let currentPanel = $state<Panel>("menu");
   let status = $state("준비됨");
@@ -137,8 +143,11 @@
     });
 
     try {
+      const options: DisableOptions | null = virtChecked
+        ? computeDisableOptions(virtItems)
+        : null;
       const results = await invoke<DisableResult[]>("execute_disable", {
-        selective: virtChecked,
+        options,
       });
       for (const r of results) {
         disableLog = [
@@ -176,6 +185,36 @@
     } catch (e) {
       status = `재부팅 오류: ${e}`;
     }
+  }
+
+  /// 가상화 점검 결과로부터 비활성화 옵션 계산
+  function computeDisableOptions(items: VirtItem[]): DisableOptions {
+    const find = (cat: string) => items.find((i) => i.category === cat);
+    const isActive = (item: VirtItem | undefined) =>
+      item !== undefined &&
+      (item.status.includes("활성화됨") || item.status.includes("설치됨 (활성)"));
+
+    const hypervActive =
+      isActive(find("Hyper-V (전체)")) ||
+      isActive(find("Hyper-V 하이퍼바이저"));
+
+    const hypervisorLaunch = find("Hypervisor 시작 유형");
+    const hypervisorActive =
+      hypervisorLaunch !== undefined &&
+      !hypervisorLaunch.status.toLowerCase().includes("off") &&
+      hypervisorLaunch.status !== "확인 불가";
+
+    return {
+      hyperv: hypervActive || hypervisorActive,
+      wsl:
+        isActive(find("WSL")) ||
+        isActive(find("가상 머신 플랫폼 (WSL2)")),
+      vbs:
+        isActive(find("VBS (가상화 기반 보안)")) ||
+        isActive(find("CredentialGuard")) ||
+        isActive(find("LSA 보호")),
+      core_isolation: isActive(find("HVCI (코어 격리)")),
+    };
   }
 
   // 상태에 따른 상태 표시 색상

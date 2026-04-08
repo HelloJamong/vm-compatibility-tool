@@ -95,6 +95,16 @@ pub fn get_hypervisor_launch_type() -> String {
     }
 }
 
+/// PowerShell 스크립트 실행
+pub fn run_powershell(script: &str) -> ProcessResult {
+    Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .creation_flags_no_window()
+        .output()
+        .map(ProcessResult::from_output)
+        .unwrap_or_else(|e| ProcessResult::error(&e.to_string()))
+}
+
 /// 시스템 재부팅 (5초 후)
 pub fn schedule_reboot() -> ProcessResult {
     Command::new("shutdown.exe")
