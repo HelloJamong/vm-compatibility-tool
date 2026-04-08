@@ -1,17 +1,22 @@
 fn main() {
-    let mut attrs = tauri_build::Attributes::new();
-
     #[cfg(target_os = "windows")]
-    {
-        attrs = attrs.windows_attributes(
-            tauri_build::WindowsAttributes::new().app_manifest(ADMIN_MANIFEST),
-        );
-    }
+    let attrs = tauri_build::Attributes::new()
+        .windows_attributes(tauri_build::WindowsAttributes::new().app_manifest(ADMIN_MANIFEST));
 
+    #[cfg(not(target_os = "windows"))]
+    let attrs = tauri_build::Attributes::new();
+
+    // tauri-build가 tauri.conf.json의 bundle.icon을 읽어 아이콘을 임베딩하고
+    // VERSION 리소스도 함께 처리함 — 별도 winresource 호출 불필요 (중복 충돌 발생)
     tauri_build::try_build(attrs).expect("failed to run tauri-build");
 }
 
-/// requireAdministrator manifest — UAC 승격 요청
+/// requireAdministrator manifest
+///
+/// Microsoft.Windows.Common-Controls v6 포함 필수:
+/// Tauri가 TaskDialogIndirect를 사용하므로 누락 시
+/// "프로시저 시작 지점을 찾을 수 없습니다" 오류 발생
+#[cfg(target_os = "windows")]
 const ADMIN_MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
@@ -27,4 +32,16 @@ const ADMIN_MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone=
       <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
     </application>
   </compatibility>
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
 </assembly>"#;

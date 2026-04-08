@@ -72,7 +72,7 @@ jobs:
 
       # ── 빌드 (포터블 EXE만) ───────────────────────────────────────────────
       - name: Build Tauri portable EXE
-        run: npm run tauri build
+        run: npm run tauri build -- --no-bundle
         env:
           TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -7,35 +7,12 @@ pub mod windows {
     use anyhow::Context;
     use winreg::{enums::*, RegKey};
 
-    /// VBS(Virtualization Based Security) 활성화 여부
-    pub fn get_vbs_enabled() -> bool {
+    /// 단일 DWORD 값 읽기 — 키 또는 값이 없으면 None
+    pub fn get_dword(path: &str, name: &str) -> Option<u32> {
         RegKey::predef(HKEY_LOCAL_MACHINE)
-            .open_subkey(r"SYSTEM\CurrentControlSet\Control\DeviceGuard")
-            .and_then(|k| k.get_value::<u32, _>("EnableVirtualizationBasedSecurity"))
-            .map(|v| v == 1)
-            .unwrap_or(false)
-    }
-
-    /// HVCI(HyperVisor-Protected Code Integrity) 활성화 여부
-    pub fn get_hvci_enabled() -> bool {
-        RegKey::predef(HKEY_LOCAL_MACHINE)
-            .open_subkey(
-                r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity",
-            )
-            .and_then(|k| k.get_value::<u32, _>("Enabled"))
-            .map(|v| v == 1)
-            .unwrap_or(false)
-    }
-
-    /// CredentialGuard 활성화 여부
-    pub fn get_credential_guard_enabled() -> bool {
-        RegKey::predef(HKEY_LOCAL_MACHINE)
-            .open_subkey(
-                r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard",
-            )
-            .and_then(|k| k.get_value::<u32, _>("Enabled"))
-            .map(|v| v == 1)
-            .unwrap_or(false)
+            .open_subkey(path)
+            .and_then(|key| key.get_value::<u32, _>(name))
+            .ok()
     }
 
     /// Windows 버전/빌드 정보 (Registry 기반)
@@ -47,9 +24,7 @@ pub mod windows {
         let get = |k: &RegKey, name: &str| -> String {
             k.get_value::<String, _>(name).unwrap_or_default()
         };
-        let get_u32 = |k: &RegKey, name: &str| -> u32 {
-            k.get_value::<u32, _>(name).unwrap_or(0)
-        };
+        let get_u32 = |k: &RegKey, name: &str| -> u32 { k.get_value::<u32, _>(name).unwrap_or(0) };
 
         match key {
             Some(k) => {
@@ -89,14 +64,6 @@ pub mod windows {
         }
     }
 
-    /// LSA 보호 설정 (LsaCfgFlags 값)
-    pub fn get_lsa_cfg_flags() -> u32 {
-        RegKey::predef(HKEY_LOCAL_MACHINE)
-            .open_subkey(r"SYSTEM\CurrentControlSet\Control\Lsa")
-            .and_then(|k| k.get_value::<u32, _>("LsaCfgFlags"))
-            .unwrap_or(0)
-    }
-
     /// 레지스트리 DWORD 값 쓰기 (비활성화 작업용)
     pub fn set_dword(path: &str, name: &str, value: u32) -> anyhow::Result<()> {
         let (key, _) = RegKey::predef(HKEY_LOCAL_MACHINE)
@@ -133,10 +100,9 @@ pub mod windows {
 pub mod windows {
     use anyhow::Result;
 
-    pub fn get_vbs_enabled() -> bool { false }
-    pub fn get_hvci_enabled() -> bool { false }
-    pub fn get_credential_guard_enabled() -> bool { false }
-    pub fn get_lsa_cfg_flags() -> u32 { 0 }
+    pub fn get_dword(_path: &str, _name: &str) -> Option<u32> {
+        None
+    }
     pub fn set_dword(_path: &str, _name: &str, _value: u32) -> Result<()> {
         Err(anyhow::anyhow!("Windows 전용 기능입니다"))
     }

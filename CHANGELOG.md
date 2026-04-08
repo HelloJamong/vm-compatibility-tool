@@ -1,5 +1,77 @@
 # Changelog
 
+## [beta-v26.04.01.0005] - 2026-04-08
+
+### Changed
+- 1차 UI 밀도 개선
+  - 초기 메뉴를 더 컴팩트한 3버튼 중심 레이아웃으로 조정
+  - 과도한 여백을 줄이고 패널 간격을 축소
+  - 기본 창 크기 `980x640`, 최소 크기 `820x560`으로 조정
+- 하단 상태 영역 재구성
+  - 버전 정보를 좌측 하단에 고정
+  - 상태 메시지와 진행 프로그레스바를 우측 하단에 배치
+- 시스템 정보 / 가상화 점검 표 밀도 개선
+  - 행/열 정렬을 더 촘촘하게 조정
+  - 열 폭 및 셀 래핑을 개선해 가독성 향상
+
+### Fixed
+- 데이터 수집 중 진행 상태가 화면 중앙 로딩 표시만 보이던 문제를 전역 하단 진행 바로 보완
+- 리스트 표에서 행/열 배치가 어색하게 보이던 구성을 1차 정리
+
+---
+
+## [beta-v26.04.01.0004] - 2026-04-08
+
+### Added
+- 공용 레지스트리 manifest 도입 (`registry_manifest.rs`)
+  - VBS / 코어 격리 레지스트리 항목을 `DisableWrite` / `InspectOnly` / `ExcludedLegacy`로 분류
+  - 점검/조치가 같은 source of truth를 공유하도록 정리
+- Windows 수동 QA 체크리스트 추가 (`docs/windows-manual-qa-checklist.md`)
+- GUI 공통 컴포넌트 추가
+  - `StatusBadge`, `SummaryCard`, `ConfirmDialog`
+  - 메뉴/가상화 점검/비활성화 패널 컴포넌트 분리
+
+### Changed
+- 레지스트리 비활성화 정책 정리
+  - 값이 없는 레지스트리는 생성하지 않음
+  - 실제로 존재하고 활성 상태인 값만 `0`으로 변경
+- 가상화 점검 결과에 structured metadata 추가
+  - `disable_group`, `action_required`, `manifest_id`, `source_type`
+- `App.svelte`를 오케스트레이션 셸로 단순화하고 UI를 컴포넌트 중심 구조로 재편
+- README 및 `.claude/CLAUDE.md`를 현재 Tauri/Rust/Svelte 기준으로 재작성
+
+### Fixed
+- selective 비활성화가 표시 문자열 매칭에 의존하던 구조 제거
+- reference-only legacy 레지스트리 항목을 자동 조치 없이 점검 결과에 다시 노출
+- 재부팅 흐름을 브라우저 `window.confirm` 대신 인앱 확인 다이얼로그로 개선
+- 저장소 루트의 obsolete WPF/C# 유산 및 과도한 Visual Studio 중심 `.gitignore` 정리
+
+---
+
+## [beta-v26.04.01.0003] - 2026-04-08
+
+### Added
+- `DisableOptions` 구조체 도입 — selective 비활성화 로직 구현
+  - 가상화 점검 완료 시 결과 기반으로 필요한 항목만 선택 실행
+  - Hyper-V / WSL / VBS / 코어 격리 각각 독립적으로 on/off 제어
+  - 점검 없이 실행 시 전체 항목 일괄 실행 (기존 동작 유지)
+- 이벤트 로그 수집 구현 (`event_log_service`)
+  - 최근 7일간 System / Application 로그 Level별 건수 (위험/오류/경고)
+  - 최근 오류·위험 이벤트 5건 (시간/로그명/ID/메시지 미리보기)
+  - PowerShell Get-WinEvent 기반, 관리자 권한 환경에서 동작
+- 비활성화 진행 이벤트 개선
+  - 태스크 실패 시 `disable-progress` 이벤트 재전송 (`success: false`)
+  - 실행 대상 없을 때 "비활성화 필요 항목 없음" 결과 반환
+
+### Fixed
+- `execute_disable` 커맨드 시그니처 변경: `selective: bool` → `options: Option<DisableOptions>`
+- Beta/Nightly/Release 포터블 빌드 오류 수정: `--bundles none` → `--no-bundle`
+- EXE 아이콘 검은 네모 문제: `src-tauri/icons/icon.ico`를 멀티사이즈 ICO(16/24/32/48/64/128/256)로 재생성
+- 시스템 정보의 최근 오류/위험 메시지 한글 깨짐 수정: PowerShell 출력 인코딩을 UTF-8로 강제
+- 실행 시 "TaskDialogIndirect를 찾을 수 없습니다" 오류: manifest에 `Microsoft.Windows.Common-Controls v6` 의존성 추가
+
+---
+
 ## [nightly-v26.04.01.0001] - 2026-04-07
 
 ### Added

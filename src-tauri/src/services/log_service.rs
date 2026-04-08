@@ -41,15 +41,3 @@ pub fn log_error(context: &str, error: &str) {
         let _ = file.write_all(entry.as_bytes());
     }
 }
-
-/// 오늘 로그 파일 경로 반환 (없으면 None)
-pub fn today_log_path() -> Option<String> {
-    let now = chrono::Local::now();
-    let filename = format!("error_{}.log", now.format("%Y%m%d"));
-    let path = log_dir().join(filename);
-    if path.exists() {
-        path.to_str().map(|s| s.to_string())
-    } else {
-        None
-    }
-}
