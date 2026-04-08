@@ -1,0 +1,92 @@
+name: Beta Build
+
+on:
+  push:
+    branches: [beta]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Beta Release
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse version from CHANGELOG.md
+        id: ver
+        run: python .github/scripts/parse_version.py $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Validate beta version format
+        shell: pwsh
+        run: |
+          $type = "${{ steps.ver.outputs.type }}"
+          if ($type -ne "beta") {
+            Write-Error "CHANGELOG.md 최신 항목이 beta 형식이 아닙니다: ${{ steps.ver.outputs.display }}"
+            Write-Error "예시: ## [beta-v26.04.03.0001] - 2026-04-07"
+            exit 1
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      - run: npm ci
+
+      - name: Inject version into Cargo.toml
+        shell: pwsh
+        run: |
+          $semver = "${{ steps.ver.outputs.semver }}"
+          $content = Get-Content src-tauri/Cargo.toml -Raw
+          $content = [regex]::Replace($content, '(?m)^version = "[\d\.\-a-z]+"', "version = `"$semver`"")
+          Set-Content src-tauri/Cargo.toml $content
+
+      - name: Inject version into tauri.conf.json
+        shell: pwsh
+        run: |
+          $conf = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $conf.version = "${{ steps.ver.outputs.semver }}"
+          $conf | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.conf.json
+
+      - name: Build Tauri portable EXE
+        run: npm run tauri build
+        env:
+          TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rename EXE
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.display }}"
+          $src = Get-ChildItem "src-tauri/target/release/*.exe" |
+                 Where-Object { $_.Name -notlike "*build*" } |
+                 Select-Object -First 1
+          Copy-Item $src.FullName "VM-Compatibility-Tool-${version}.exe"
+
+      - name: Create Beta Pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.display }}
+          name: "${{ steps.ver.outputs.display }}"
+          prerelease: true
+          files: VM-Compatibility-Tool-*.exe
+          body: |
+            ## 베타 빌드
+
+            ${{ steps.ver.outputs.body }}
+
+            ---
+            > ⚠️ 이 빌드는 베타 버전입니다. 검증 목적으로만 사용하세요.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
