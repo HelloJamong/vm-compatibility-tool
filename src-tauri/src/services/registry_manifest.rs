@@ -278,9 +278,7 @@ pub fn all_manifest_entries() -> &'static [RegistryManifestEntry] {
 }
 
 pub fn inspect_entries() -> impl Iterator<Item = &'static RegistryManifestEntry> {
-    MANIFEST
-        .iter()
-        .filter(|entry| entry.action != RegistryAction::ExcludedLegacy)
+    MANIFEST.iter()
 }
 
 pub fn disable_write_entries(group: DisableGroup) -> Vec<ResolvedRegistryManifestEntry> {
@@ -354,10 +352,10 @@ mod tests {
     }
 
     #[test]
-    fn excluded_legacy_entries_are_not_inspected() {
+    fn excluded_legacy_entries_are_visible_for_reference() {
         let inspectable_ids: Vec<_> = super::inspect_entries().map(|entry| entry.id).collect();
 
-        assert!(!inspectable_ids.contains(&"legacy.system_guard_enabled"));
-        assert!(!inspectable_ids.contains(&"legacy.configure_system_guard_launch"));
+        assert!(inspectable_ids.contains(&"legacy.system_guard_enabled"));
+        assert!(inspectable_ids.contains(&"legacy.configure_system_guard_launch"));
     }
 }

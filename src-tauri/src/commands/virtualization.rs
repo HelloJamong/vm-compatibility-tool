@@ -229,7 +229,9 @@ fn build_registry_item(
                 .with_disable_group(entry.disable_group, false)
                 .with_manifest_id(entry.id)
         }
-        RegistryAction::ExcludedLegacy => unreachable!("excluded entries are filtered before use"),
+        RegistryAction::ExcludedLegacy => {
+            build_excluded_legacy_registry_item(entry, values, &details)
+        }
     }
 }
 
@@ -272,4 +274,36 @@ fn registry_inspect_status(values: &[(Option<u32>, String)]) -> String {
         .next()
         .map(|value| format!("값: {value}"))
         .unwrap_or_else(|| "미설정".to_string())
+}
+
+fn build_excluded_legacy_registry_item(
+    entry: &RegistryManifestEntry,
+    values: &[(Option<u32>, String)],
+    details: &str,
+) -> VirtualizationItem {
+    let target_value = entry.target_value.unwrap_or(0);
+    let has_any_value = values.iter().any(|(value, _)| value.is_some());
+    let differs_from_target = values
+        .iter()
+        .filter_map(|(value, _)| *value)
+        .any(|value| value != target_value);
+
+    let status = if differs_from_target {
+        "활성화됨 (참고)"
+    } else if has_any_value {
+        "비활성화됨 (참고)"
+    } else {
+        "미설정 (참고)"
+    };
+
+    let recommendation = if differs_from_target {
+        "자동 조치 제외 항목 — 필요 시 수동 검토"
+    } else {
+        "참고용 항목"
+    };
+
+    VirtualizationItem::new(entry.label, status, details, recommendation)
+        .with_source(VirtualizationSource::Registry)
+        .with_disable_group(entry.disable_group, false)
+        .with_manifest_id(entry.id)
 }
