@@ -4,6 +4,7 @@ dist/
 
 # Rust / Tauri
 src-tauri/target/
+src-tauri/gen/
 
 # Local build outputs
 release/

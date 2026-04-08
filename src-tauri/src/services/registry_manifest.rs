@@ -273,10 +273,6 @@ const MANIFEST: &[RegistryManifestEntry] = &[
     },
 ];
 
-pub fn all_manifest_entries() -> &'static [RegistryManifestEntry] {
-    MANIFEST
-}
-
 pub fn inspect_entries() -> impl Iterator<Item = &'static RegistryManifestEntry> {
     MANIFEST.iter()
 }
@@ -319,15 +315,12 @@ pub fn resolve_entry_paths(entry: &RegistryManifestEntry) -> Vec<ResolvedRegistr
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        all_manifest_entries, disable_write_entries, resolve_entry_paths, RegistryAction,
-        RegistryHiveSet,
-    };
+    use super::{disable_write_entries, resolve_entry_paths, RegistryAction, RegistryHiveSet, MANIFEST};
     use crate::models::virtualization::DisableGroup;
 
     #[test]
     fn inspect_only_entry_keeps_current_controlset_scope() {
-        let entry = all_manifest_entries()
+        let entry = MANIFEST
             .iter()
             .find(|entry| entry.id == "core_isolation.hvci_was_enabled_by")
             .expect("manifest entry exists");

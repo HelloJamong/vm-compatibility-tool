@@ -116,9 +116,4 @@ impl DisableOptions {
             core_isolation: true,
         }
     }
-
-    /// 하나라도 실행 대상이 있는지 확인
-    pub fn any(&self) -> bool {
-        self.hyperv || self.wsl || self.vbs || self.core_isolation
-    }
 }

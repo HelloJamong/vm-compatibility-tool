@@ -15,36 +15,6 @@ pub mod windows {
             .ok()
     }
 
-    /// VBS(Virtualization Based Security) 활성화 여부
-    pub fn get_vbs_enabled() -> bool {
-        get_dword(
-            r"SYSTEM\CurrentControlSet\Control\DeviceGuard",
-            "EnableVirtualizationBasedSecurity",
-        )
-        .map(|value| value == 1)
-        .unwrap_or(false)
-    }
-
-    /// HVCI(HyperVisor-Protected Code Integrity) 활성화 여부
-    pub fn get_hvci_enabled() -> bool {
-        get_dword(
-            r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity",
-            "Enabled",
-        )
-        .map(|value| value == 1)
-        .unwrap_or(false)
-    }
-
-    /// CredentialGuard 활성화 여부
-    pub fn get_credential_guard_enabled() -> bool {
-        get_dword(
-            r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard",
-            "Enabled",
-        )
-        .map(|value| value == 1)
-        .unwrap_or(false)
-    }
-
     /// Windows 버전/빌드 정보 (Registry 기반)
     pub fn get_windows_version() -> WindowsVersionInfo {
         let key = RegKey::predef(HKEY_LOCAL_MACHINE)
@@ -94,11 +64,6 @@ pub mod windows {
         }
     }
 
-    /// LSA 보호 설정 (LsaCfgFlags 값)
-    pub fn get_lsa_cfg_flags() -> u32 {
-        get_dword(r"SYSTEM\CurrentControlSet\Control\Lsa", "LsaCfgFlags").unwrap_or(0)
-    }
-
     /// 레지스트리 DWORD 값 쓰기 (비활성화 작업용)
     pub fn set_dword(path: &str, name: &str, value: u32) -> anyhow::Result<()> {
         let (key, _) = RegKey::predef(HKEY_LOCAL_MACHINE)
@@ -137,18 +102,6 @@ pub mod windows {
 
     pub fn get_dword(_path: &str, _name: &str) -> Option<u32> {
         None
-    }
-    pub fn get_vbs_enabled() -> bool {
-        false
-    }
-    pub fn get_hvci_enabled() -> bool {
-        false
-    }
-    pub fn get_credential_guard_enabled() -> bool {
-        false
-    }
-    pub fn get_lsa_cfg_flags() -> u32 {
-        0
     }
     pub fn set_dword(_path: &str, _name: &str, _value: u32) -> Result<()> {
         Err(anyhow::anyhow!("Windows 전용 기능입니다"))
