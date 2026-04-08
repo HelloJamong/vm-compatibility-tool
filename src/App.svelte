@@ -36,6 +36,7 @@
   let disableRunning = $state(false);
   let disableComplete = $state(false);
   let rebootConfirmOpen = $state(false);
+  let progressValue = $state<number | null>(null);
 
   onMount(async () => {
     try {
@@ -54,6 +55,7 @@
     if (systemLoaded) return;
     systemLoading = true;
     status = "시스템 정보 수집 중...";
+    progressValue = null;
     try {
       systemItems = await invoke<SystemInfoItem[]>("get_system_info");
       systemLoaded = true;
@@ -62,6 +64,7 @@
       status = `오류: ${e}`;
     } finally {
       systemLoading = false;
+      progressValue = null;
     }
   }
 
@@ -74,6 +77,7 @@
     showPanel("virtualization");
     virtLoading = true;
     status = "가상화 설정 점검 중...";
+    progressValue = null;
     try {
       virtItems = await invoke<VirtItem[]>("get_virtualization_status");
       virtChecked = true;
@@ -82,6 +86,7 @@
       status = `오류: ${e}`;
     } finally {
       virtLoading = false;
+      progressValue = null;
     }
   }
 
@@ -128,11 +133,13 @@
     disableComplete = false;
     disableLog = ["▶ 비활성화 작업을 시작합니다..."];
     status = "비활성화 실행 중...";
+    progressValue = 0;
 
     const unlisten = await listen<ProgressEvent>("disable-progress", (e) => {
       const { step, total, message, success } = e.payload;
       const icon = success ? "⏳" : "⚠️";
       disableLog = [...disableLog, `  [${step}/${total}] ${icon} ${message}`];
+      progressValue = total > 0 ? step / total : null;
     });
 
     try {
@@ -160,6 +167,7 @@
       status = "오류 발생";
     } finally {
       disableRunning = false;
+      progressValue = null;
       unlisten();
     }
   }
@@ -242,7 +250,7 @@
 <div class="flex flex-col h-screen bg-gray-50 select-none">
   <AppHeader currentPanel={currentPanel} onBack={() => showPanel("menu")} />
 
-  <main class="flex-1 overflow-hidden p-5">
+  <main class="flex-1 overflow-hidden p-4">
     {#if currentPanel === "menu"}
       <MenuPanel
         virtChecked={virtChecked}
@@ -288,7 +296,12 @@
     {/if}
   </main>
 
-  <StatusBar {status} {version} />
+  <StatusBar
+    {status}
+    {version}
+    isBusy={systemLoading || virtLoading || disableRunning}
+    {progressValue}
+  />
 
   <ConfirmDialog
     open={rebootConfirmOpen}

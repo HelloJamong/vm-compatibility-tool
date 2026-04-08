@@ -9,8 +9,8 @@
   let { currentPanel, onBack }: Props = $props();
 </script>
 
-<header class="bg-slate-800 text-white px-6 py-3 flex items-center justify-between shrink-0">
-  <span class="text-lg font-bold tracking-tight">VM Compatibility Tool</span>
+<header class="bg-slate-800 text-white px-4 py-2.5 flex items-center justify-between shrink-0">
+  <span class="text-base font-bold tracking-tight">VM Compatibility Tool</span>
   {#if currentPanel !== "menu"}
     <button
       onclick={onBack}
