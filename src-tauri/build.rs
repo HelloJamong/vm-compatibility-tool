@@ -1,12 +1,10 @@
 fn main() {
-    let mut attrs = tauri_build::Attributes::new();
-
     #[cfg(target_os = "windows")]
-    {
-        attrs = attrs.windows_attributes(
-            tauri_build::WindowsAttributes::new().app_manifest(ADMIN_MANIFEST),
-        );
-    }
+    let attrs = tauri_build::Attributes::new()
+        .windows_attributes(tauri_build::WindowsAttributes::new().app_manifest(ADMIN_MANIFEST));
+
+    #[cfg(not(target_os = "windows"))]
+    let attrs = tauri_build::Attributes::new();
 
     // tauri-build가 tauri.conf.json의 bundle.icon을 읽어 아이콘을 임베딩하고
     // VERSION 리소스도 함께 처리함 — 별도 winresource 호출 불필요 (중복 충돌 발생)
@@ -18,6 +16,7 @@ fn main() {
 /// Microsoft.Windows.Common-Controls v6 포함 필수:
 /// Tauri가 TaskDialogIndirect를 사용하므로 누락 시
 /// "프로시저 시작 지점을 찾을 수 없습니다" 오류 발생
+#[cfg(target_os = "windows")]
 const ADMIN_MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
