@@ -3,50 +3,35 @@
   import { listen } from "@tauri-apps/api/event";
   import { save } from "@tauri-apps/plugin-dialog";
   import { onMount } from "svelte";
-
-  type Panel = "menu" | "systemInfo" | "virtualization" | "disable";
-  type SystemInfoItem = { category: string; item: string; value: string };
-  type DisableGroup = "hyperv" | "wsl" | "vbs" | "core_isolation";
-  type VirtSource = "unknown" | "wmi" | "feature" | "bcd" | "registry";
-  type VirtItem = {
-    category: string;
-    status: string;
-    details: string;
-    recommendation: string;
-    disable_group: DisableGroup | null;
-    source_type: VirtSource;
-    action_required: boolean;
-    manifest_id: string | null;
-  };
-  type DisableResult = { task: string; success: boolean; message: string };
-  type ProgressEvent = {
-    step: number;
-    total: number;
-    message: string;
-    success: boolean;
-  };
-  type DisableOptions = {
-    hyperv: boolean;
-    wsl: boolean;
-    vbs: boolean;
-    core_isolation: boolean;
-  };
+  import AppHeader from "./components/layout/AppHeader.svelte";
+  import StatusBar from "./components/layout/StatusBar.svelte";
+  import ConfirmDialog from "./components/common/ConfirmDialog.svelte";
+  import MenuPanel from "./components/menu/MenuPanel.svelte";
+  import SystemInfoPanel from "./components/system/SystemInfoPanel.svelte";
+  import VirtualizationPanel from "./components/virtualization/VirtualizationPanel.svelte";
+  import DisablePanel from "./components/disable/DisablePanel.svelte";
+  import type {
+    DisableGroup,
+    DisableOptions,
+    DisableResult,
+    Panel,
+    ProgressEvent,
+    SystemInfoItem,
+    VirtItem,
+  } from "./lib/app-types";
 
   let currentPanel = $state<Panel>("menu");
   let status = $state("준비됨");
   let version = $state("dev");
 
-  // 시스템 정보
   let systemItems = $state<SystemInfoItem[]>([]);
   let systemLoading = $state(false);
   let systemLoaded = $state(false);
 
-  // 가상화 점검
   let virtItems = $state<VirtItem[]>([]);
   let virtLoading = $state(false);
   let virtChecked = $state(false);
 
-  // 비활성화
   let disableLog = $state<string[]>([]);
   let disableRunning = $state(false);
   let disableComplete = $state(false);
@@ -151,18 +136,14 @@
     });
 
     try {
-      const options: DisableOptions | null = virtChecked
-        ? computeDisableOptions(virtItems)
-        : null;
-      const results = await invoke<DisableResult[]>("execute_disable", {
-        options,
-      });
-      for (const r of results) {
+      const options: DisableOptions | null = virtChecked ? computeDisableOptions(virtItems) : null;
+      const results = await invoke<DisableResult[]>("execute_disable", { options });
+      for (const result of results) {
         disableLog = [
           ...disableLog,
           "",
-          `${r.success ? "✅" : "⚠️"} ${r.task}`,
-          r.message,
+          `${result.success ? "✅" : "⚠️"} ${result.task}`,
+          result.message,
         ];
       }
       disableLog = [
@@ -183,7 +164,7 @@
     }
   }
 
-  async function requestReboot() {
+  function requestReboot() {
     rebootConfirmOpen = true;
   }
 
@@ -196,8 +177,6 @@
       status = `재부팅 오류: ${e}`;
     }
   }
-
-  // ── 헬퍼 함수 ────────────────────────────────────────────────────────
 
   function computeDisableOptions(items: VirtItem[]): DisableOptions {
     return {
@@ -212,7 +191,6 @@
     return items.some((item) => item.disable_group === group && item.action_required);
   }
 
-  // 비활성화 필요 그룹 수
   function actionCount(items: VirtItem[]): number {
     return new Set(
       items
@@ -239,11 +217,11 @@
     return [opts.hyperv, opts.wsl, opts.vbs, opts.core_isolation].filter(Boolean).length;
   }
 
-  // 로그 라인 색상 클래스
   function logLineClass(line: string): string {
     if (line.includes("✅") || line.startsWith("✓")) return "text-green-400";
-    if (line.includes("❌") || line.includes("⚠️") || line.startsWith("✗"))
+    if (line.includes("❌") || line.includes("⚠️") || line.startsWith("✗")) {
       return "text-red-400";
+    }
     if (line.startsWith("  [")) return "text-yellow-300";
     if (line.startsWith("━")) return "text-gray-500";
     if (line.startsWith("- ") || line.startsWith("  -")) return "text-gray-400";
@@ -251,362 +229,94 @@
     return "text-green-300";
   }
 
-  // 가상화 상태 색상
-  function statusColor(s: string): string {
-    if (s.includes("활성화됨") || s.includes("활성)") || s.includes("설치됨 (활성)"))
-      return "text-red-600 font-semibold";
+  function statusColor(statusText: string): string {
     if (
-      s.includes("비활성") ||
-      s.includes("미설치") ||
-      s.includes("Off") ||
-      s.includes("지원됨")
-    )
+      statusText.includes("활성화됨") ||
+      statusText.includes("활성)") ||
+      statusText.includes("설치됨 (활성)")
+    ) {
+      return "text-red-600 font-semibold";
+    }
+    if (
+      statusText.includes("비활성") ||
+      statusText.includes("미설치") ||
+      statusText.includes("Off") ||
+      statusText.includes("지원됨")
+    ) {
       return "text-green-600";
+    }
     return "text-gray-700";
   }
 
-  // 시스템 정보 테이블: 카테고리 첫 행 여부
   function isCategoryStart(items: SystemInfoItem[], index: number): boolean {
     return index === 0 || items[index].category !== items[index - 1].category;
   }
+
+  const rebootBullets = [
+    "실행 중인 작업은 모두 저장하세요.",
+    "변경 사항 적용을 위해 시스템 재시작이 필요합니다.",
+  ];
 </script>
 
 <div class="flex flex-col h-screen bg-gray-50 select-none">
-  <!-- Header -->
-  <header class="bg-slate-800 text-white px-6 py-3 flex items-center justify-between shrink-0">
-    <span class="text-lg font-bold tracking-tight">VM Compatibility Tool</span>
-    {#if currentPanel !== "menu"}
-      <button
-        onclick={() => showPanel("menu")}
-        class="text-sm text-slate-300 hover:text-white transition-colors"
-      >
-        ← 메인 메뉴
-      </button>
-    {/if}
-  </header>
+  <AppHeader currentPanel={currentPanel} onBack={() => showPanel("menu")} />
 
-  <!-- Content -->
   <main class="flex-1 overflow-hidden p-5">
-
-    <!-- 메인 메뉴 -->
     {#if currentPanel === "menu"}
-      <div class="flex flex-col items-center justify-center h-full gap-4">
-        <p class="text-gray-400 text-sm mb-1">작업을 선택하세요</p>
-
-        <button
-          onclick={loadSystemInfo}
-          class="w-80 px-5 py-4 text-left bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors shadow"
-        >
-          <div class="text-base font-bold">🖥️ 시스템 사양 체크</div>
-          <div class="mt-1 text-xs text-blue-100">OS / CPU / 메모리 / 디스크 / 이벤트 로그 요약</div>
-        </button>
-
-        <button
-          onclick={loadVirtStatus}
-          class="w-80 px-5 py-4 text-left bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors shadow"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-base font-bold">🔍 가상화 설정 점검</span>
-            {#if virtChecked}
-              {@const count = actionCount(virtItems)}
-              <span class="text-xs font-normal px-2 py-0.5 rounded-full {count > 0 ? 'bg-red-200 text-red-800' : 'bg-green-200 text-green-800'}">
-                {count > 0 ? `${count}개 조치 필요` : "정상"}
-              </span>
-            {/if}
-          </div>
-          <div class="mt-1 text-xs text-amber-100">Hyper-V / WSL / VBS / 코어 격리 상태 확인</div>
-        </button>
-
-        <button
-          onclick={() => showPanel("disable")}
-          class="w-80 px-5 py-4 text-left bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors shadow"
-        >
-          <div class="text-base font-bold">⚙️ VBS 및 Hyper-V 비활성화</div>
-          <div class="mt-1 text-xs text-red-100">점검 결과를 기준으로 필요한 조치만 선택 실행</div>
-        </button>
-      </div>
-
-    <!-- 시스템 정보 -->
+      <MenuPanel
+        virtChecked={virtChecked}
+        actionGroupCount={actionCount(virtItems)}
+        onLoadSystemInfo={loadSystemInfo}
+        onLoadVirtStatus={loadVirtStatus}
+        onShowDisable={() => showPanel("disable")}
+      />
     {:else if currentPanel === "systemInfo"}
-      <div class="flex flex-col gap-3 h-full">
-        <div class="flex items-center justify-between shrink-0">
-          <h2 class="text-base font-bold text-gray-800">시스템 상세 정보</h2>
-          <div class="flex gap-2">
-            <button
-              onclick={refreshSystemInfo}
-              disabled={systemLoading}
-              class="px-3 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 disabled:opacity-50 rounded transition-colors"
-            >
-              새로고침
-            </button>
-            <button
-              onclick={exportSystemCsv}
-              disabled={systemLoading || systemItems.length === 0}
-              class="px-3 py-1.5 text-xs bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded transition-colors"
-            >
-              CSV 내보내기
-            </button>
-          </div>
-        </div>
-
-        {#if systemLoading}
-          <div class="flex-1 flex flex-col items-center justify-center gap-3 text-gray-400">
-            <div class="w-8 h-8 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
-            <span class="text-sm">시스템 정보 수집 중...</span>
-          </div>
-        {:else}
-          <div class="flex-1 overflow-auto rounded shadow-sm">
-            <table class="w-full text-sm border-collapse bg-white">
-              <thead class="bg-gray-100 sticky top-0 z-10">
-                <tr>
-                  <th class="text-left px-3 py-2 border-b w-28 font-semibold text-gray-700">분류</th>
-                  <th class="text-left px-3 py-2 border-b w-36 font-semibold text-gray-700">항목</th>
-                  <th class="text-left px-3 py-2 border-b font-semibold text-gray-700">값</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each systemItems as item, i}
-                  {@const isStart = isCategoryStart(systemItems, i)}
-                  <tr class="{isStart ? 'border-t-2 border-gray-200' : ''} {i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-blue-50 transition-colors">
-                    <td class="px-3 py-1.5 border-b {isStart ? 'font-bold text-slate-700' : 'text-transparent'} text-xs">
-                      {isStart ? item.category : ""}
-                    </td>
-                    <td class="px-3 py-1.5 border-b text-gray-600 text-xs">{item.item}</td>
-                    <td class="px-3 py-1.5 border-b text-gray-900 text-xs">{item.value}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        {/if}
-      </div>
-
-    <!-- 가상화 점검 -->
+      <SystemInfoPanel
+        {systemLoading}
+        {systemItems}
+        onRefresh={refreshSystemInfo}
+        onExport={exportSystemCsv}
+        {isCategoryStart}
+      />
     {:else if currentPanel === "virtualization"}
-      <div class="flex flex-col gap-3 h-full">
-        <div class="flex items-center justify-between shrink-0">
-          <h2 class="text-base font-bold text-gray-800">가상화 설정 점검</h2>
-          <div class="flex gap-2">
-            <button
-              onclick={loadVirtStatus}
-              disabled={virtLoading}
-              class="px-3 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 disabled:opacity-50 rounded transition-colors"
-            >
-              재점검
-            </button>
-            <button
-              onclick={exportVirtCsv}
-              disabled={virtLoading || virtItems.length === 0}
-              class="px-3 py-1.5 text-xs bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded transition-colors"
-            >
-              CSV 내보내기
-            </button>
-          </div>
-        </div>
-
-        {#if virtLoading}
-          <div class="flex-1 flex flex-col items-center justify-center gap-3 text-gray-400">
-            <div class="w-8 h-8 border-4 border-amber-200 border-t-amber-500 rounded-full animate-spin"></div>
-            <span class="text-sm">가상화 설정 점검 중...</span>
-          </div>
-        {:else}
-          {#if virtItems.length > 0}
-            <div class="grid grid-cols-3 gap-3 shrink-0">
-              <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                <div class="text-xs font-semibold text-red-700">조치 필요</div>
-                <div class="mt-1 text-2xl font-bold text-red-800">{actionItemCount(virtItems)}</div>
-                <div class="text-xs text-red-600">실제 항목 수</div>
-              </div>
-              <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-                <div class="text-xs font-semibold text-green-700">정상/비활성</div>
-                <div class="mt-1 text-2xl font-bold text-green-800">{healthyItemCount(virtItems)}</div>
-                <div class="text-xs text-green-600">추가 조치 불필요</div>
-              </div>
-              <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
-                <div class="text-xs font-semibold text-slate-700">확인 불가</div>
-                <div class="mt-1 text-2xl font-bold text-slate-800">{unknownItemCount(virtItems)}</div>
-                <div class="text-xs text-slate-600">수동 확인 권장</div>
-              </div>
-            </div>
-          {/if}
-
-          <div class="flex-1 overflow-auto rounded shadow-sm">
-            <table class="w-full text-sm border-collapse bg-white">
-              <thead class="bg-gray-100 sticky top-0 z-10">
-                <tr>
-                  <th class="text-left px-3 py-2 border-b w-44 font-semibold text-gray-700">항목</th>
-                  <th class="text-left px-3 py-2 border-b w-28 font-semibold text-gray-700">상태</th>
-                  <th class="text-left px-3 py-2 border-b font-semibold text-gray-700">상세 정보</th>
-                  <th class="text-left px-3 py-2 border-b w-48 font-semibold text-gray-700">권장사항</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each virtItems as item, i}
-                  <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {item.recommendation ? 'hover:bg-red-50' : 'hover:bg-green-50'} transition-colors">
-                    <td class="px-3 py-2 border-b font-medium text-gray-800 text-xs">{item.category}</td>
-                    <td class="px-3 py-2 border-b">
-                      <span class="text-xs {statusColor(item.status)}">{item.status}</span>
-                    </td>
-                    <td class="px-3 py-2 border-b text-gray-500 text-xs">{item.details}</td>
-                    <td class="px-3 py-2 border-b text-xs">
-                      {#if item.recommendation}
-                        <span class="text-amber-700">{item.recommendation}</span>
-                      {:else}
-                        <span class="text-green-600">정상</span>
-                      {/if}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-
-          <!-- 점검 완료 요약 -->
-          {#if virtChecked && virtItems.length > 0}
-            {@const count = actionCount(virtItems)}
-            <div class="shrink-0 flex items-center justify-between rounded px-4 py-2.5 text-sm
-              {count > 0 ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}">
-              {#if count > 0}
-                <span class="text-amber-800 font-semibold">
-                  ⚠️ {count}개 작업 그룹에서 조치가 필요합니다
-                </span>
-                <button
-                  onclick={() => showPanel("disable")}
-                  class="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded font-bold transition-colors"
-                >
-                  비활성화 실행 →
-                </button>
-              {:else}
-                <span class="text-green-800 font-semibold">
-                  ✅ 모든 항목이 VM 호환 상태입니다
-                </span>
-              {/if}
-            </div>
-          {/if}
-        {/if}
-      </div>
-
-    <!-- 비활성화 -->
+      <VirtualizationPanel
+        {virtLoading}
+        {virtChecked}
+        {virtItems}
+        actionGroupCount={actionCount(virtItems)}
+        actionItemTotal={actionItemCount(virtItems)}
+        healthyItemTotal={healthyItemCount(virtItems)}
+        unknownItemTotal={unknownItemCount(virtItems)}
+        onReload={loadVirtStatus}
+        onExport={exportVirtCsv}
+        onShowDisable={() => showPanel("disable")}
+        {statusColor}
+      />
     {:else if currentPanel === "disable"}
-      <div class="flex flex-col gap-3 h-full">
-        <h2 class="text-base font-bold text-gray-800 shrink-0">VBS 및 Hyper-V 비활성화</h2>
-
-        <!-- 경고 박스 -->
-        <div class="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 shrink-0">
-          <p class="font-bold mb-1.5">⚠️ 이 작업은 다음을 수행합니다</p>
-          <ul class="list-disc list-inside space-y-0.5 text-xs text-red-700">
-            <li>Hyper-V 및 관련 기능 제거 (DISM)</li>
-            <li>WSL2 제거 (DISM)</li>
-            <li>VBS (가상화 기반 보안) 레지스트리 비활성화</li>
-            <li>코어 격리 비활성화</li>
-            <li>hypervisorlaunchtype off (bcdedit)</li>
-          </ul>
-        </div>
-
-        <!-- 선택적 실행 미리보기 -->
-        {#if virtChecked}
-          {@const opts = computeDisableOptions(virtItems)}
-          <div class="bg-blue-50 border border-blue-200 rounded p-3 shrink-0">
-            <div class="flex items-center justify-between gap-3 mb-2">
-              <p class="text-xs font-semibold text-blue-800">점검 결과 기반 실행 예정 항목</p>
-              <span class="text-xs px-2 py-0.5 rounded-full {selectedTaskCount(opts) > 0 ? 'bg-blue-200 text-blue-900' : 'bg-gray-200 text-gray-600'}">
-                {selectedTaskCount(opts)}개 작업 선택
-              </span>
-            </div>
-            <div class="grid grid-cols-2 gap-1.5">
-              {#each [
-                { label: "Hyper-V 비활성화", on: opts.hyperv },
-                { label: "WSL 비활성화", on: opts.wsl },
-                { label: "VBS 레지스트리 비활성화", on: opts.vbs },
-                { label: "코어 격리 비활성화", on: opts.core_isolation },
-              ] as task}
-                <div class="flex items-center gap-1.5 text-xs">
-                  <span class="{task.on ? 'text-red-500' : 'text-gray-300'}">●</span>
-                  <span class="{task.on ? 'text-gray-800 font-medium' : 'text-gray-400 line-through'}">
-                    {task.label}
-                  </span>
-                </div>
-              {/each}
-            </div>
-          </div>
-        {:else}
-          <div class="bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs text-amber-700 shrink-0">
-            ℹ️ 가상화 점검 없이 모든 항목을 일괄 처리합니다.
-            <button onclick={loadVirtStatus} class="ml-1 underline hover:text-amber-900">
-              지금 점검하기
-            </button>
-          </div>
-        {/if}
-
-        <!-- 실행 버튼 -->
-        <div class="flex gap-3 shrink-0">
-          <button
-            onclick={runDisable}
-            disabled={disableRunning}
-            class="px-5 py-2.5 font-bold bg-red-500 hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded transition-colors"
-          >
-            {disableRunning ? "실행 중..." : "비활성화 실행"}
-          </button>
-          {#if disableComplete}
-            <button
-              onclick={requestReboot}
-              class="px-5 py-2.5 font-bold bg-slate-700 hover:bg-slate-800 text-white rounded transition-colors"
-            >
-              🔄 지금 재부팅
-            </button>
-          {/if}
-        </div>
-
-        <!-- 색상 구분 로그 -->
-        <div class="flex-1 overflow-hidden">
-          <div class="h-full bg-gray-900 rounded p-4 text-xs font-mono overflow-y-auto">
-            {#if disableLog.length === 0}
-              <span class="text-gray-500">비활성화 실행 버튼을 클릭하면 작업이 시작됩니다.</span>
-            {:else}
-              {#each disableLog as line}
-                <div class="{logLineClass(line)} leading-5">{line || "\u00A0"}</div>
-              {/each}
-            {/if}
-          </div>
-        </div>
-      </div>
+      <DisablePanel
+        {virtChecked}
+        {disableRunning}
+        {disableComplete}
+        {disableLog}
+        disableOptions={computeDisableOptions(virtItems)}
+        selectedTaskCount={selectedTaskCount(computeDisableOptions(virtItems))}
+        onRunDisable={runDisable}
+        onRequestReboot={requestReboot}
+        onLoadVirtStatus={loadVirtStatus}
+        {logLineClass}
+      />
     {/if}
   </main>
 
-  <!-- Status Bar -->
-  <footer class="bg-gray-200 px-4 py-1.5 flex justify-between text-xs text-gray-600 shrink-0 border-t border-gray-300">
-    <span>{status}</span>
-    <span class="text-gray-400">{version}</span>
-  </footer>
+  <StatusBar {status} {version} />
 
-  {#if rebootConfirmOpen}
-    <div class="absolute inset-0 bg-black/35 flex items-center justify-center p-4">
-      <div class="w-full max-w-md rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
-        <div class="px-5 py-4 border-b border-gray-200">
-          <h3 class="text-base font-bold text-gray-900">지금 재부팅할까요?</h3>
-          <p class="mt-1 text-sm text-gray-500">
-            확인을 누르면 5초 후 자동으로 재부팅됩니다.
-          </p>
-        </div>
-        <div class="px-5 py-4 text-sm text-gray-700 space-y-1">
-          <div>• 실행 중인 작업은 모두 저장하세요.</div>
-          <div>• 변경 사항 적용을 위해 시스템 재시작이 필요합니다.</div>
-        </div>
-        <div class="px-5 py-4 bg-gray-50 flex justify-end gap-2">
-          <button
-            onclick={() => (rebootConfirmOpen = false)}
-            class="px-4 py-2 text-sm rounded bg-white border border-gray-300 text-gray-700 hover:bg-gray-100"
-          >
-            취소
-          </button>
-          <button
-            onclick={confirmReboot}
-            class="px-4 py-2 text-sm rounded bg-slate-800 text-white hover:bg-slate-900"
-          >
-            재부팅 예약
-          </button>
-        </div>
-      </div>
-    </div>
-  {/if}
+  <ConfirmDialog
+    open={rebootConfirmOpen}
+    title="지금 재부팅할까요?"
+    message="확인을 누르면 5초 후 자동으로 재부팅됩니다."
+    bullets={rebootBullets}
+    confirmLabel="재부팅 예약"
+    onConfirm={confirmReboot}
+    onCancel={() => (rebootConfirmOpen = false)}
+  />
 </div>
