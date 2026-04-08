@@ -1,6 +1,6 @@
 # Changelog
 
-## [beta-v26.04.01.0001] - 2026-04-08
+## [beta-v26.04.01.0002] - 2026-04-08
 
 ### Added
 - `DisableOptions` 구조체 도입 — selective 비활성화 로직 구현
@@ -17,6 +17,8 @@
 
 ### Fixed
 - `execute_disable` 커맨드 시그니처 변경: `selective: bool` → `options: Option<DisableOptions>`
+- EXE 아이콘 검은 네모 문제: `bundle.active=false` 시 winresource로 직접 아이콘 임베딩
+- 실행 시 "TaskDialogIndirect를 찾을 수 없습니다" 오류: manifest에 `Microsoft.Windows.Common-Controls v6` 의존성 추가
 
 ---
 
