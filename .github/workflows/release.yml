@@ -3,6 +3,9 @@ name: Release Build
 on:
   workflow_dispatch:   # 실수 방지: 수동 트리거만 허용
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Official Release
