@@ -12,6 +12,7 @@ release/
 # Local tooling state
 .omc/
 .omx/
+omx/
 
 # Editor / OS noise
 .vs/
