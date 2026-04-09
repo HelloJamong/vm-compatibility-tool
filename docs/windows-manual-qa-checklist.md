@@ -81,7 +81,7 @@ Prepare a machine where some relevant values exist and are active, and others ar
 - [ ] `npm run check`
 - [ ] `cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc`
 - [ ] No new obvious layout breakage at 1100x750
-- [ ] Minimum supported size 900x600 remains usable
+- [ ] Minimum supported size 820x560 remains usable
 
 ## Notes to Record During QA
 - Windows version / build

@@ -141,7 +141,7 @@ Windows 실기 검증은 반드시 아래 문서를 기준으로 수행합니다
 - missing-key 정책
 - selective disable
 - reboot/export 흐름
-- 최소 창 크기(900x600) 가독성
+- 최소 창 크기(820x560) 가독성
 
 ---
 
