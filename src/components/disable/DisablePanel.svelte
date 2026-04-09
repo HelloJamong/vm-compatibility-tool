@@ -36,10 +36,10 @@
     <p class="font-bold mb-1.5">⚠️ 이 작업은 다음을 수행합니다</p>
     <ul class="list-disc list-inside space-y-0.5 text-xs text-red-700">
       <li>Hyper-V 및 관련 기능 제거 (DISM)</li>
-      <li>WSL2 제거 (DISM)</li>
+      <li>WSL 기능 제거 (DISM)</li>
       <li>VBS (가상화 기반 보안) 레지스트리 비활성화</li>
       <li>코어 격리 비활성화</li>
-      <li>hypervisorlaunchtype off (bcdedit)</li>
+      <li>Hypervisor 시작 유형 비활성화 (bcdedit)</li>
     </ul>
   </div>
 

@@ -77,12 +77,12 @@
         <tbody>
           {#each virtItems as item, i}
             {@const isReference = item.status.includes("(참고)")}
-            <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isReference ? 'hover:bg-slate-50' : item.recommendation ? 'hover:bg-red-50' : 'hover:bg-green-50'} transition-colors align-top">
+            <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isReference ? 'hover:bg-slate-50' : item.action_required ? 'hover:bg-red-50' : item.status.includes('확인 불가') ? 'hover:bg-gray-100' : 'hover:bg-green-50'} transition-colors align-top">
               <td class="px-3 py-2 border-b font-medium text-gray-800 text-xs align-top break-words">{item.category}</td>
               <td class="px-3 py-2 border-b align-top">
                 <StatusBadge
                   label={item.status}
-                  tone={isReference ? "neutral" : item.status.includes("활성화됨") || item.status.includes("설치됨 (활성)") ? "danger" : "success"}
+                  tone={isReference ? "neutral" : item.action_required ? "danger" : item.status.includes("확인 불가") ? "neutral" : "success"}
                   className="font-medium"
                 />
               </td>
