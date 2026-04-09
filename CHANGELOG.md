@@ -1,5 +1,23 @@
 # Changelog
 
+## [beta-v26.04.01.0006] - 2026-04-10
+
+### Fixed
+- 가상화 점검 결과 배지 tone 오류 수정
+  - 상태 문자열 매칭 방식에서 `action_required` 필드 기반으로 변경
+  - `확인 불가`, `미설정` 항목이 잘못 녹색(success)으로 표시되던 문제 수정
+  - `확인 불가` 행 hover 색상도 녹색 → 회색으로 수정
+- 비활성화 패널 작업 목록 문구 수정
+  - `WSL2 제거 (DISM)` → `WSL 기능 제거 (DISM)` (WSL1 / WSL2 모두 대상)
+  - `hypervisorlaunchtype off (bcdedit)` → `Hypervisor 시작 유형 비활성화 (bcdedit)` (다른 항목과 형식 통일)
+
+### Docs
+- 최소 창 크기 기준 `900x600` → `820x560` 으로 문서 통일
+  - `.claude/CLAUDE.md` QA 기준 항목 수정
+  - `docs/windows-manual-qa-checklist.md` Regression Checks 항목 수정
+
+---
+
 ## [beta-v26.04.01.0005] - 2026-04-08
 
 ### Changed
