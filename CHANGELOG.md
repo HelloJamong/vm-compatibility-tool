@@ -1,5 +1,17 @@
 # Changelog
 
+## [beta-v26.04.01.0009] - 2026-04-10
+
+### Changed
+- 내부 배포 실행 안내 보강
+  - `README.md`에 SmartScreen 경고 대응 절차 추가
+  - beta / release 릴리즈 노트에 `추가 정보 → 실행` 안내 추가
+
+### Docs
+- Windows 수동 QA 체크리스트에 SmartScreen 노출/안내 문구 일치 여부 점검 항목 추가
+
+---
+
 ## [beta-v26.04.01.0008] - 2026-04-10
 
 ### Added
