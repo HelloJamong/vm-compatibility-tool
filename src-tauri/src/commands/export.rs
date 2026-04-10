@@ -1,9 +1,16 @@
 /// CSV 내보내기 커맨드
 
+use serde::Serialize;
 use crate::services::log_service;
 use crate::models::{system_info::SystemInfoItem, virtualization::VirtualizationItem};
 use std::fs;
 use std::path::PathBuf;
+
+#[derive(Debug, Serialize)]
+pub struct InspectionExportOutput {
+    pub system_csv_path: String,
+    pub virtualization_csv_path: String,
+}
 
 #[tauri::command]
 pub async fn export_csv(
@@ -35,6 +42,38 @@ pub async fn export_csv_auto(
             virt_items,
         )?;
         Ok(path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| format!("작업 오류: {e}"))?
+    .map_err(|e: anyhow::Error| e.to_string())
+}
+
+#[tauri::command]
+pub async fn export_inspection_csvs_auto(
+    system_items: Vec<SystemInfoItem>,
+    virt_items: Vec<VirtualizationItem>,
+) -> Result<InspectionExportOutput, String> {
+    tokio::task::spawn_blocking(move || {
+        let system_path = build_auto_csv_path("system")?;
+        let virt_path = build_auto_csv_path("virtualization")?;
+
+        write_csv(
+            system_path.to_string_lossy().as_ref(),
+            "system",
+            Some(system_items),
+            None,
+        )?;
+        write_csv(
+            virt_path.to_string_lossy().as_ref(),
+            "virtualization",
+            None,
+            Some(virt_items),
+        )?;
+
+        Ok(InspectionExportOutput {
+            system_csv_path: system_path.to_string_lossy().into_owned(),
+            virtualization_csv_path: virt_path.to_string_lossy().into_owned(),
+        })
     })
     .await
     .map_err(|e| format!("작업 오류: {e}"))?
@@ -85,34 +124,6 @@ fn write_csv(
             }
         }
         "virtualization" => {
-            content.push_str("항목,상태,상세 정보,권장사항\n");
-            if let Some(items) = virt_items {
-                for item in items {
-                    content.push_str(&format!(
-                        "{},{},{},{}\n",
-                        escape_csv(&item.category),
-                        escape_csv(&item.status),
-                        escape_csv(&item.details),
-                        escape_csv(&item.recommendation),
-                    ));
-                }
-            }
-        }
-        "inspection" => {
-            content.push_str("[시스템 정보]\n");
-            content.push_str("항목,세부 정보,값\n");
-            if let Some(items) = system_items {
-                for item in items {
-                    content.push_str(&format!(
-                        "{},{},{}\n",
-                        escape_csv(&item.category),
-                        escape_csv(&item.item),
-                        escape_csv(&item.value),
-                    ));
-                }
-            }
-
-            content.push_str("\n[가상화 점검 결과]\n");
             content.push_str("항목,상태,상세 정보,권장사항\n");
             if let Some(items) = virt_items {
                 for item in items {

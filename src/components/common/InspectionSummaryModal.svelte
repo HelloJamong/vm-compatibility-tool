@@ -3,8 +3,9 @@
     open: boolean;
     complete: boolean;
     progressPercent: number;
+    currentAction: string;
     actionSummaries: string[];
-    savedFilename: string | null;
+    savedFilenames: string[];
     saveError: string | null;
     version: string;
     onStartAction: () => void;
@@ -15,8 +16,9 @@
     open,
     complete,
     progressPercent,
+    currentAction,
     actionSummaries,
-    savedFilename,
+    savedFilenames,
     saveError,
     version,
     onStartAction,
@@ -62,7 +64,7 @@
             <div class="progress-track" aria-hidden="true">
               <div class="progress-fill" style={`width: ${Math.max(0, Math.min(100, progressPercent))}%`}></div>
             </div>
-            <p class="summary-message">시스템 정보와 가상화 관련 항목을 순차적으로 확인하고 있습니다.</p>
+            <p class="summary-message">{currentAction}</p>
           </section>
         {:else if actionSummaries.length === 0}
           <section class="summary-card">
@@ -71,8 +73,11 @@
               <span class="summary-count summary-count--info">특이사항 없음</span>
             </div>
             <p class="summary-message">조치가 필요한 항목이 없습니다.</p>
-            {#if savedFilename}
-              <p class="summary-message">점검 결과가 <strong>"{savedFilename}"</strong> 로 저장되었습니다.</p>
+            {#if savedFilenames.length > 0}
+              <p class="summary-message">점검 결과 파일이 저장되었습니다.</p>
+              {#each savedFilenames as filename}
+                <p class="summary-message"><strong>"{filename}"</strong></p>
+              {/each}
             {:else if saveError}
               <p class="summary-message summary-message--error">점검 결과 저장 실패: {saveError}</p>
             {/if}

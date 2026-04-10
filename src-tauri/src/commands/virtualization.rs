@@ -220,7 +220,7 @@ fn build_registry_item(
         .iter()
         .map(|(_, detail)| detail.as_str())
         .collect::<Vec<_>>()
-        .join(" | ");
+        .join("\n");
 
     match entry.action {
         RegistryAction::DisableWrite => build_disable_write_registry_item(entry, values, &details),

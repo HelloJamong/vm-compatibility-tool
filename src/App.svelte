@@ -22,6 +22,11 @@
     VirtItem,
   } from "./lib/app-types";
 
+  type InspectionExportOutput = {
+    system_csv_path: string;
+    virtualization_csv_path: string;
+  };
+
   let currentPanel = $state<Panel>("menu");
   let status = $state("준비됨");
   let version = $state("dev");
@@ -34,12 +39,14 @@
   let virtLoading = $state(false);
   let virtChecked = $state(false);
   let inspectionModalOpen = $state(true);
-  let inspectionResultPath = $state<string | null>(null);
+  let inspectionSystemResultPath = $state<string | null>(null);
+  let inspectionVirtResultPath = $state<string | null>(null);
   let inspectionResultSaveError = $state<string | null>(null);
   let inspectionProgress = $state(0);
   let inspectionStage = $state<"idle" | "collecting" | "saving" | "complete">("idle");
   let systemDone = $state(false);
   let virtDone = $state(false);
+  let inspectionCurrentAction = $state("점검 준비 중...");
 
   let disableLog = $state<string[]>([]);
   let disableRunning = $state(false);
@@ -67,22 +74,25 @@
     await Promise.all([fetchSystemInfo(), fetchVirtStatus()]);
 
     inspectionStage = "saving";
+    inspectionCurrentAction = "점검 결과 CSV 저장 중...";
     try {
-      inspectionResultPath = await invoke<string>("export_csv_auto", {
-        dataType: "inspection",
+      const exportResult = await invoke<InspectionExportOutput>("export_inspection_csvs_auto", {
         systemItems,
         virtItems,
       });
+      inspectionSystemResultPath = exportResult.system_csv_path;
+      inspectionVirtResultPath = exportResult.virtualization_csv_path;
     } catch (e) {
       inspectionResultSaveError = `${e}`;
     }
 
     inspectionStage = "complete";
     inspectionProgress = 100;
+    inspectionCurrentAction = "점검 완료";
     stopInspectionProgressTimer();
 
-    status = inspectionResultPath
-      ? `점검 완료 — ${basename(inspectionResultPath)} 저장됨`
+    status = inspectionSystemResultPath && inspectionVirtResultPath
+      ? `점검 완료 — ${basename(inspectionSystemResultPath)}, ${basename(inspectionVirtResultPath)} 저장됨`
       : "점검 완료 — 비활성화 준비됨";
   });
 
@@ -241,7 +251,7 @@
   }
 
   async function closeInspectionModal() {
-    await getCurrentWindow().close();
+    await invoke("exit_app");
   }
 
   function startInspectionActions() {
@@ -340,11 +350,13 @@
   function startInspectionProgressTimer() {
     stopInspectionProgressTimer();
     inspectionProgress = 3;
+    inspectionCurrentAction = "시스템 점검 준비 중...";
     inspectionProgressTimer = setInterval(() => {
       const target = inspectionStageTarget();
       if (inspectionProgress >= target) return;
       const delta = Math.max(1, Math.ceil((target - inspectionProgress) / 7));
       inspectionProgress = Math.min(target, inspectionProgress + delta);
+      inspectionCurrentAction = nextInspectionAction();
     }, 180);
   }
 
@@ -363,6 +375,45 @@
     if (inspectionStage === "collecting") return 68;
     return 8;
   }
+
+  function nextInspectionAction(): string {
+    if (inspectionStage === "saving") return "점검 결과 CSV 저장 중...";
+    if (inspectionStage === "complete") return "점검 완료";
+
+    if (systemDone && !virtDone) {
+      return pickAction([
+        "Hyper-V 기능 상태 수집 중...",
+        "WSL / VirtualMachinePlatform 상태 수집 중...",
+        "VBS 레지스트리 수집 중...",
+        "코어 격리 레지스트리 수집 중...",
+      ]);
+    }
+
+    if (!systemDone && virtDone) {
+      return pickAction([
+        "운영체제 정보 수집 중...",
+        "CPU / 메모리 정보 수집 중...",
+        "디스크 / 부팅 정보 수집 중...",
+        "메인보드 / GPU 정보 수집 중...",
+        "이벤트 로그 수집 중...",
+      ]);
+    }
+
+    return pickAction([
+      "운영체제 정보 수집 중...",
+      "CPU / 메모리 정보 수집 중...",
+      "디스크 / 부팅 정보 수집 중...",
+      "Hyper-V 기능 상태 수집 중...",
+      "WSL / VirtualMachinePlatform 상태 수집 중...",
+      "VBS 레지스트리 수집 중...",
+      "코어 격리 레지스트리 수집 중...",
+      "이벤트 로그 수집 중...",
+    ]);
+  }
+
+  function pickAction(actions: string[]): string {
+    return actions[Math.floor((inspectionProgress / 7) % actions.length)] ?? "점검 진행 중...";
+  }
 </script>
 
 {#if inspectionModalOpen}
@@ -370,8 +421,12 @@
     open={inspectionModalOpen}
     complete={systemLoaded && virtChecked}
     progressPercent={inspectionProgressPercent()}
+    currentAction={inspectionCurrentAction}
     actionSummaries={inspectionActionSummaries(virtItems)}
-    savedFilename={basename(inspectionResultPath)}
+    savedFilenames={[
+      basename(inspectionSystemResultPath),
+      basename(inspectionVirtResultPath),
+    ].filter((value): value is string => Boolean(value))}
     saveError={inspectionResultSaveError}
     {version}
     onStartAction={startInspectionActions}
