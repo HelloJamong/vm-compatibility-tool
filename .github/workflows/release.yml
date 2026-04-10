@@ -117,6 +117,24 @@ jobs:
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "- Set WINDOWS_CODESIGN_PFX_BASE64 and WINDOWS_CODESIGN_PFX_PASSWORD to enable internal signing." >> $env:GITHUB_STEP_SUMMARY
 
+      - name: Write release notes from CHANGELOG
+        shell: python
+        run: |
+          import re
+          with open("CHANGELOG.md", encoding="utf-8") as f:
+              content = f.read()
+          pattern = r"## \[([^\]]+)\] - \d{4}-\d{2}-\d{2}\n(.*?)(?=\n---|\n## \[|\Z)"
+          sections = re.findall(pattern, content, re.DOTALL)
+          body = sections[0][1].strip() if sections else "(변경사항 없음)"
+          footer = (
+              "\n\n---\n"
+              "📦 **사용 방법**: EXE 파일을 다운로드하여 관리자 권한으로 실행하세요.\n\n"
+              "> 실행 시 Windows SmartScreen 경고가 표시될 수 있습니다.  \n"
+              "> 내부 배포본이 맞다면 `추가 정보` → `실행` 순서로 진행하세요."
+          )
+          with open("release_body.md", "w", encoding="utf-8") as f:
+              f.write(body + footer)
+
       - name: Create official GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -125,16 +143,7 @@ jobs:
           prerelease: false
           make_latest: true
           files: VM-Compatibility-Tool-*.exe
-          body: |
-            ## 변경 사항
-
-            ${{ steps.ver.outputs.body }}
-
-            ---
-            📦 **사용 방법**: EXE 파일을 다운로드하여 관리자 권한으로 실행하세요.
-            
-            > 실행 시 Windows SmartScreen 경고가 표시될 수 있습니다.
-            > 내부 배포본이 맞다면 `추가 정보` → `실행` 순서로 진행하세요.
+          body_path: release_body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
