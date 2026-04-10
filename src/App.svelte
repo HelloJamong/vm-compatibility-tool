@@ -359,8 +359,8 @@
     if (inspectionStage === "complete") return 100;
     if (inspectionStage === "saving") return 92;
     if (systemDone && virtDone) return 88;
-    if (systemDone || virtDone) return 64;
-    if (inspectionStage === "collecting") return 38;
+    if (systemDone || virtDone) return 82;
+    if (inspectionStage === "collecting") return 68;
     return 8;
   }
 </script>
