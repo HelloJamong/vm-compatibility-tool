@@ -10,6 +10,8 @@ jobs:
   build:
     name: Build Official Release
     runs-on: windows-latest
+    env:
+      HAS_CODESIGN_SECRETS: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 != '' && secrets.WINDOWS_CODESIGN_PFX_PASSWORD != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +90,7 @@ jobs:
           Copy-Item $src.FullName "VM-Compatibility-Tool-${version}.exe"
 
       - name: Sign EXE with internal certificate
-        if: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 != '' && secrets.WINDOWS_CODESIGN_PFX_PASSWORD != '' }}
+        if: env.HAS_CODESIGN_SECRETS == 'true'
         shell: pwsh
         env:
           WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
@@ -99,7 +101,7 @@ jobs:
             -Files "VM-Compatibility-Tool-${{ steps.ver.outputs.display }}.exe"
 
       - name: Signing summary (enabled)
-        if: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 != '' && secrets.WINDOWS_CODESIGN_PFX_PASSWORD != '' }}
+        if: env.HAS_CODESIGN_SECRETS == 'true'
         shell: pwsh
         run: |
           echo "## 🔏 Code signing" >> $env:GITHUB_STEP_SUMMARY
@@ -108,7 +110,7 @@ jobs:
           echo "- End-user PCs must trust the internal root/intermediate certificate to avoid unknown publisher warnings." >> $env:GITHUB_STEP_SUMMARY
 
       - name: Signing summary (skipped)
-        if: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 == '' || secrets.WINDOWS_CODESIGN_PFX_PASSWORD == '' }}
+        if: env.HAS_CODESIGN_SECRETS != 'true'
         shell: pwsh
         run: |
           echo "## ⚠️ Code signing skipped" >> $env:GITHUB_STEP_SUMMARY
