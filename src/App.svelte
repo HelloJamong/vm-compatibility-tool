@@ -12,6 +12,7 @@
   import SystemInfoPanel from "./components/system/SystemInfoPanel.svelte";
   import VirtualizationPanel from "./components/virtualization/VirtualizationPanel.svelte";
   import DisablePanel from "./components/disable/DisablePanel.svelte";
+  import DisableActionModal from "./components/disable/DisableActionModal.svelte";
   import type {
     DisableGroup,
     DisableOptions,
@@ -52,6 +53,15 @@
   let disableRunning = $state(false);
   let disableComplete = $state(false);
   let rebootConfirmOpen = $state(false);
+
+  let disableActionModalOpen = $state(false);
+  let disableActionStage = $state<"warning" | "running" | "complete">("warning");
+  let disableActionProgress = $state(0);
+  let disableActionCurrentAction = $state("");
+  let disableActionHasErrors = $state(false);
+  let disableActionLogPath = $state<string | null>(null);
+  let disableActionBackupPath = $state<string | null>(null);
+  let disableActionOptions = $state<DisableOptions>({ hyperv: false, wsl: false, vbs: false, core_isolation: false });
   let progressValue = $state<number | null>(null);
   let inspectionProgressTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -269,6 +279,73 @@
     }
   }
 
+  function openDisableActionModal() {
+    disableActionOptions = virtChecked
+      ? computeDisableOptions(virtItems)
+      : { hyperv: true, wsl: true, vbs: true, core_isolation: true };
+    disableActionStage = "warning";
+    disableActionProgress = 0;
+    disableActionCurrentAction = "";
+    disableActionHasErrors = false;
+    disableActionLogPath = null;
+    disableActionBackupPath = null;
+    disableActionModalOpen = true;
+  }
+
+  async function startDisableAction() {
+    disableActionStage = "running";
+    disableActionProgress = 0;
+    disableActionCurrentAction = "조치 시작 중...";
+    disableRunning = true;
+    disableComplete = false;
+    disableLog = ["▶ 비활성화 작업을 시작합니다..."];
+    status = "비활성화 실행 중...";
+
+    const unlisten = await listen<ProgressEvent>("disable-progress", (e) => {
+      const { step, total, message, success } = e.payload;
+      disableActionCurrentAction = message;
+      disableActionProgress = total > 0 ? (step / total) * 100 : 0;
+      const icon = success ? "⏳" : "⚠️";
+      disableLog = [...disableLog, `  [${step}/${total}] ${icon} ${message}`];
+    });
+
+    try {
+      const options: DisableOptions | null = virtChecked ? computeDisableOptions(virtItems) : null;
+      const output = await invoke<DisableOutput>("execute_disable", { options });
+      disableActionHasErrors = output.results.some((r) => !r.success);
+      disableActionLogPath = output.log_path;
+      disableActionBackupPath = output.backup_path;
+      for (const result of output.results) {
+        disableLog = [...disableLog, "", `${result.success ? "✅" : "⚠️"} ${result.task}`, result.message];
+      }
+      disableComplete = true;
+      disableActionStage = "complete";
+      status = output.log_path ? "비활성화 완료 — 로그 저장됨" : "비활성화 완료 — 재부팅 필요";
+    } catch (e) {
+      disableActionHasErrors = true;
+      disableActionStage = "complete";
+      disableLog = [...disableLog, `❌ 오류: ${e}`];
+      status = "오류 발생";
+    } finally {
+      disableRunning = false;
+      unlisten();
+    }
+  }
+
+  function closeDisableActionModal() {
+    disableActionModalOpen = false;
+    if (disableComplete) showPanel("menu");
+  }
+
+  async function rebootNow() {
+    try {
+      await invoke("request_reboot");
+      status = "재부팅 예약 완료 (5초 후)";
+    } catch (e) {
+      status = `재부팅 오류: ${e}`;
+    }
+  }
+
   function computeDisableOptions(items: VirtItem[]): DisableOptions {
     return {
       hyperv: hasActionForGroup(items, "hyperv"),
@@ -433,7 +510,23 @@
   }
 </script>
 
-{#if inspectionModalOpen}
+{#if disableActionModalOpen}
+  <DisableActionModal
+    open={disableActionModalOpen}
+    stage={disableActionStage}
+    progressPercent={disableActionProgress}
+    currentAction={disableActionCurrentAction}
+    disableOptions={disableActionOptions}
+    hasErrors={disableActionHasErrors}
+    logPath={disableActionLogPath}
+    backupPath={disableActionBackupPath}
+    {version}
+    onStart={startDisableAction}
+    onCancel={closeDisableActionModal}
+    onRebootNow={rebootNow}
+    onDismiss={closeDisableActionModal}
+  />
+{:else if inspectionModalOpen}
   <InspectionSummaryModal
     open={inspectionModalOpen}
     complete={systemLoaded && virtChecked}
@@ -495,7 +588,7 @@
           disableOptions={computeDisableOptions(virtItems)}
           selectedTaskCount={selectedTaskCount(computeDisableOptions(virtItems))}
           whfbDetected={hasWhfbWarning(virtItems)}
-          onRunDisable={runDisable}
+          onRunDisable={openDisableActionModal}
           onRequestReboot={requestReboot}
           onLoadVirtStatus={loadVirtStatus}
           {logLineClass}
