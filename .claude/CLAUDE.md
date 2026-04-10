@@ -1,13 +1,13 @@
 # VM Compatibility Tool — 현재 프로젝트 컨텍스트
 
-## 현재 상태 (2026-04-08 기준)
+## 현재 상태 (2026-04-10 기준)
 
 이 저장소의 현재 기준 구현은 **Tauri v2 + Rust + Svelte 5** 입니다.
 기존 WPF/C# 코드는 마이그레이션 참조용으로 사용되었지만, 현재 저장소 런타임 기준은 Tauri 앱입니다.
 
 ### 현재 브랜치 운용
 - 주 작업 브랜치: `beta`
-- 현재 초점: **Windows 실기 검증 + GUI polish + 문서 동기화**
+- 현재 초점: **Stage 4 (시스템 정보 자동 저장) + Windows 실기 QA**
 
 ---
 
@@ -19,10 +19,14 @@
 | 시스템 정보 수집 | ✅ 완료 | 이벤트 로그 포함 |
 | 가상화 점검 | ✅ 완료 | Hyper-V / WSL / BCD / Registry |
 | 선택적 비활성화 | ✅ 완료 | 점검 결과 기반 실행 |
-| 레지스트리 manifest | ✅ 초안 구현 완료 | shared source of truth 도입 |
-| GUI 구조 분리 | ✅ 1차 완료 | `App.svelte` → 패널 컴포넌트 분리 |
-| Windows 수동 QA | ⏳ 필요 | `docs/windows-manual-qa-checklist.md` 기준 |
-| README/문서 동기화 | ⏳ 진행 중 | 현재 턴에서 정리 중 |
+| 레지스트리 manifest | ✅ 완료 | shared source of truth 도입 |
+| GUI 구조 분리 | ✅ 완료 | `App.svelte` → 패널 컴포넌트 분리 |
+| UI 간소화 (운영팀 최적화) | ✅ 완료 | 앱 시작 시 자동 점검, 조치 필요 항목만 표시 |
+| WHfB 감지 + 경고 | ✅ 완료 | NGC/CloudDomainJoin/MDM 기반 감지, 경고 배너 표시 |
+| 운영 로그 자동 저장 | ✅ 완료 | `{exe_dir}/logs/*.log` — 비활성화 실행 시 자동 기록 |
+| 레지스트리 백업 (.reg) | ✅ 완료 | `{exe_dir}/logs/*_backup.reg` — UTF-16 LE BOM, 복원 가능 |
+| 시스템 정보 CSV 자동 저장 | ⏳ Stage 4 | 수동 내보내기 제거 → 자동 저장으로 변경 |
+| Windows 실기 QA | ⏳ 필요 | `docs/windows-manual-qa-checklist.md` 기준 |
 
 ---
 
@@ -95,12 +99,21 @@
 - VBS / HVCI / Credential Guard / LSA 관련 레지스트리
 - reference-only legacy 레지스트리 표시
 
+### 가상화 점검 (추가)
+- Windows Hello for Business(WHfB) 감지
+  - NGC 폴더, CloudDomainJoin 레지스트리, PassportForWork 정책, MDM 등록 타입(6/13) 기반
+  - `manifest_id: "whfb_check"` 로 구분 — 조치 대상 아님, 경고 전용
+- UI: 조치 필요 항목만 테이블 표시 (전체 데이터는 CSV로만 제공)
+
 ### 비활성화
 - Hyper-V 비활성화
 - WSL 비활성화
 - VBS 레지스트리 비활성화
 - 코어 격리 레지스트리 비활성화
 - 재부팅 요청
+- **운영 로그 자동 저장**: `{exe_dir}\logs\YYYYMMDD_HHMMSS_{컴퓨터명}.log`
+- **레지스트리 백업 자동 저장**: `{exe_dir}\logs\YYYYMMDD_HHMMSS_{컴퓨터명}_backup.reg`
+  - UTF-16 LE BOM 형식 — Windows 레지스트리 편집기에서 직접 실행해 복원 가능
 
 ---
 
@@ -147,10 +160,13 @@ Windows 실기 검증은 반드시 아래 문서를 기준으로 수행합니다
 
 ## 남은 우선순위 작업
 
-1. Windows 실기 QA 실행
-2. 검증 결과 기반 GUI 문구 / 시각 polish
-3. manifest 세부 조정 필요 시 반영
-4. 배포 전 changelog / release note 정리
+1. **Stage 4**: 시스템 정보 CSV 자동 저장 — 수동 내보내기 버튼 제거, 점검 완료 시 `{exe_dir}\logs\` 에 자동 저장
+2. Windows 실기 QA 실행 (`docs/windows-manual-qa-checklist.md` 기준)
+   - 로그/백업 파일 실제 생성 확인
+   - WHfB 감지 경고 동작 확인
+3. 검증 결과 기반 GUI 문구 / 시각 polish
+4. manifest 세부 조정 필요 시 반영
+5. 배포 전 changelog / release note 정리 (CHANGELOG 0006~0007)
 
 ---
 
