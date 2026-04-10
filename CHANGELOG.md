@@ -1,5 +1,21 @@
 # Changelog
 
+## [beta-v26.04.01.0013] - 2026-04-10
+
+### Changed
+- `design_sample.html` 재작성본을 기준으로 자동 점검 팝업 UI를 다시 정렬
+  - 팝업 폭/비율을 샘플 기준으로 축소
+  - 아이콘 / 타이포 / 여백 / summary card / 버튼 스타일 재조정
+  - 전체 톤을 더 정적인 내부 도구용 팝업 스타일로 정리
+
+### Fixed
+- 로컬 디자인 참고 파일 ignore 정책 보강
+  - `design_sample.html`
+  - `3.PNG`
+  - `4.PNG`
+
+---
+
 ## [beta-v26.04.01.0012] - 2026-04-10
 
 ### Fixed
