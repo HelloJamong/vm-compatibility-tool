@@ -288,7 +288,6 @@
         {systemItems}
         onRefresh={refreshSystemInfo}
         onExport={exportSystemCsv}
-        {isCategoryStart}
       />
     {:else if currentPanel === "virtualization"}
       <VirtualizationPanel
