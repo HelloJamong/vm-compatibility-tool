@@ -51,7 +51,8 @@
 
         <p class="description">
           {#if complete}
-            최초 실행에 따른 하드웨어 및 가상화 설정 검사가 완료되었습니다. 아래 항목에 대한 조치 필요 여부를 확인하세요.
+            최초 실행에 따른 하드웨어 및 가상화 설정 검사가 완료되었습니다.<br />
+            아래 항목에 대한 조치 필요 여부를 확인하세요.
           {:else}
             최초 실행에 따른 하드웨어 및 가상화 설정 검사를 진행하고 있습니다. 잠시만 기다려주세요.
           {/if}
@@ -156,7 +157,7 @@
   .inspection-content {
     flex: 1;
     width: 100%;
-    padding: 28px 10px 0;
+    padding: 20px 10px 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -165,19 +166,19 @@
   }
 
   .status-icon-wrap {
-    width: 84px;
-    height: 84px;
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
     background: #eef2f7;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 22px;
+    margin-bottom: 16px;
   }
 
   .status-icon {
-    width: 42px;
-    height: 42px;
+    width: 38px;
+    height: 38px;
     display: block;
   }
 
@@ -192,11 +193,11 @@
   }
 
   .description {
-    margin: 14px 0 0;
+    margin: 10px 0 0;
     width: 100%;
     max-width: none;
     font-size: 14px;
-    line-height: 1.8;
+    line-height: 1.6;
     letter-spacing: -0.02em;
     color: #7f8ea3;
     word-break: keep-all;
@@ -205,11 +206,11 @@
   .summary-card {
     width: 100%;
     max-width: none;
-    margin-top: 34px;
+    margin-top: 20px;
     border: 1px solid #dce5f0;
     border-radius: 18px;
     background: rgba(245, 247, 251, 0.82);
-    padding: 18px 18px 16px;
+    padding: 16px 16px 14px;
     box-sizing: border-box;
     text-align: left;
   }
@@ -314,8 +315,8 @@
 
   .whfb-warning {
     width: 100%;
-    margin-top: 16px;
-    padding: 12px 14px;
+    margin-top: 12px;
+    padding: 10px 12px;
     background: #fffbeb;
     border: 1px solid #f59e0b;
     border-radius: 12px;
@@ -340,19 +341,19 @@
   .actions {
     width: 100%;
     max-width: none;
-    margin-top: 36px;
-    margin-bottom: 24px;
+    margin-top: 20px;
+    margin-bottom: 12px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 10px;
   }
 
   .button {
     width: 100%;
-    min-height: 54px;
+    min-height: 48px;
     border-radius: 14px;
     border: 1px solid transparent;
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 800;
     letter-spacing: -0.02em;
     cursor: pointer;
@@ -400,7 +401,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 5px 20px 8px;
+    padding: 4px 20px 6px;
     background: #e8edf4;
   }
 
@@ -417,7 +418,7 @@
 
   @media (min-width: 640px) {
     .inspection-content {
-      padding: 36px 12px 0;
+      padding: 24px 12px 0;
     }
   }
 </style>

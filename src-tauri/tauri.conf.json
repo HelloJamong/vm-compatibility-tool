@@ -14,9 +14,9 @@
       {
         "title": "VM Compatibility Tool",
         "width": 660,
-        "height": 640,
+        "height": 700,
         "minWidth": 560,
-        "minHeight": 560,
+        "minHeight": 620,
         "resizable": false,
         "maximizable": false,
         "center": true
