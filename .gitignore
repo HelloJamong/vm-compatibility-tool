@@ -30,5 +30,7 @@ Thumbs.db
 # Local design references
 design_sample.html
 # Local-only workspace docs / AI config
-docs/
+docs/*
+!docs/windows-manual-qa-checklist.md
+!docs/vbs-registry-disable-guide.md
 .claude/
