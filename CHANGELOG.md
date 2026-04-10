@@ -1,5 +1,50 @@
 # Changelog
 
+## [beta-v26.04.01.0024] - 2026-04-10
+
+### Added
+- 비활성화 조치 전용 전체화면 모달 (`DisableActionModal`) 추가
+  - **warning 단계**: 조치 예정 항목 목록과 주의사항 표시, "조치 시작" / "취소" 버튼
+  - **running 단계**: 프로그레스바 + 퍼센트 + 현재 진행 항목 실시간 표시
+  - **complete 단계**: 조치 결과 요약 및 저장 파일명 표시
+    - "예 — 지금 재부팅 (5초 후)" 선택 시 즉시 재부팅 예약
+    - "아니요 — 나중에 재부팅" 선택 시 수동 재부팅 안내 후 닫기
+
+---
+
+## [beta-v26.04.01.0023] - 2026-04-10
+
+### Changed
+- 레지스트리 백업 파일 저장 위치를 `vmc_logs`에서 `vmc_backup` 폴더로 분리
+  - 운영 로그: `vmc_logs/YYMMDD_HHMMSS_{HostName}.log` (기존 유지)
+  - 레지스트리 백업: `vmc_backup/YYMMDD_HHMMSS_backup.reg` (신규)
+
+---
+
+## [beta-v26.04.01.0022] - 2026-04-10
+
+### Added
+- 시작 점검 완료 화면에 Windows Hello for Business 경고 추가
+  - WHfB 감지 시 경고 카드 표시 ("비활성화 후 재시도" 안내)
+  - WHfB 감지 상태에서는 `조치 시작` 버튼 비활성화
+
+---
+
+## [beta-v26.04.01.0021] - 2026-04-10
+
+### Changed
+- 앱 창 최대화 버튼 비활성화
+  - `maximizable: false` 적용으로 창 크기를 늘릴 수 없도록 제한
+- 시작 점검 화면 닫기 버튼과 Footer 사이 여백 추가
+  - `.actions`에 `margin-bottom: 24px` 적용
+- 자동 저장 로그 폴더명 변경: `logs` → `vmc_logs`
+  - 다른 프로그램 생성 폴더와 구분 가능하도록 변경
+- 자동 저장 CSV 파일명 규칙 변경
+  - 시스템 정보: `YYMMDD_HHMMSS_{HostName}-SystemInfo.csv`
+  - 가상화 점검 결과: `YYMMDD_HHMMSS_{HostName}-reg.csv`
+
+---
+
 ## [beta-v26.04.01.0020] - 2026-04-10
 
 ### Fixed

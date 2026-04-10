@@ -13,7 +13,13 @@ fn error_log_dir() -> PathBuf {
 
 pub fn operation_log_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let dir = exe.parent()?.join("logs");
+    let dir = exe.parent()?.join("vmc_logs");
+    Some(dir)
+}
+
+pub fn backup_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?.join("vmc_backup");
     Some(dir)
 }
 
@@ -67,15 +73,18 @@ pub fn save_operation_log(
     log_lines: &[String],
     backup_entries: &[RegistryBackupEntry],
 ) -> Option<(String, String)> {
-    let dir = operation_log_dir()?;
-    fs::create_dir_all(&dir).ok()?;
+    let log_dir = operation_log_dir()?;
+    fs::create_dir_all(&log_dir).ok()?;
+
+    let bak_dir = backup_dir()?;
+    fs::create_dir_all(&bak_dir).ok()?;
 
     let now = chrono::Local::now();
-    let ts = now.format("%Y%m%d_%H%M%S").to_string();
+    let ts = now.format("%y%m%d_%H%M%S").to_string();
     let cn = computer_name();
 
-    let log_path = dir.join(format!("{}_{}.log", ts, cn));
-    let reg_path = dir.join(format!("{}_{}_backup.reg", ts, cn));
+    let log_path = log_dir.join(format!("{}_{}.log", ts, cn));
+    let reg_path = bak_dir.join(format!("{}_backup.reg", ts));
 
     write_operation_log(&log_path, log_lines, &now)?;
     write_reg_backup(&reg_path, backup_entries, &now)?;

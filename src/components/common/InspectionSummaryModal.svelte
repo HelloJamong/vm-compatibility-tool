@@ -8,6 +8,7 @@
     savedFilenames: string[];
     saveError: string | null;
     version: string;
+    whfbDetected: boolean;
     onStartAction: () => void;
     onClose: () => void;
   };
@@ -21,11 +22,12 @@
     savedFilenames,
     saveError,
     version,
+    whfbDetected,
     onStartAction,
     onClose,
   }: Props = $props();
 
-  const canStartAction = $derived(complete && actionSummaries.length > 0);
+  const canStartAction = $derived(complete && actionSummaries.length > 0 && !whfbDetected);
 
   function issueTone(summary: string): "danger" | "warning" {
     return summary.includes("확인 불가") ? "warning" : "danger";
@@ -97,6 +99,16 @@
               {/each}
             </div>
           </section>
+        {/if}
+
+        {#if complete && whfbDetected}
+          <div class="whfb-warning">
+            <p class="whfb-warning-title">⚠ Windows Hello for Business 감지됨</p>
+            <p class="whfb-warning-body">
+              VBS 비활성화 조치 전에 <strong>Windows Hello for Business를 먼저 비활성화</strong>해야 합니다.<br />
+              비활성화 후 앱을 재실행하거나 점검을 다시 수행하세요.
+            </p>
+          </div>
         {/if}
 
         <div class="actions">
@@ -300,10 +312,36 @@
     background: #f2a316;
   }
 
+  .whfb-warning {
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: #fffbeb;
+    border: 1px solid #f59e0b;
+    border-radius: 12px;
+    text-align: left;
+    box-sizing: border-box;
+  }
+
+  .whfb-warning-title {
+    margin: 0 0 6px;
+    font-size: 13px;
+    font-weight: 800;
+    color: #92400e;
+  }
+
+  .whfb-warning-body {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #78350f;
+  }
+
   .actions {
     width: 100%;
     max-width: none;
     margin-top: 36px;
+    margin-bottom: 24px;
     display: flex;
     flex-direction: column;
     gap: 14px;
