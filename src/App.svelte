@@ -44,50 +44,66 @@
     } catch {
       version = "dev";
     }
+    // 앱 시작 시 자동 점검 — 패널 전환 없이 백그라운드 실행
+    status = "자동 점검 시작 중...";
+    await Promise.all([fetchSystemInfo(), fetchVirtStatus()]);
+    status = "점검 완료 — 비활성화 준비됨";
   });
 
   function showPanel(panel: Panel) {
     currentPanel = panel;
   }
 
-  async function loadSystemInfo() {
-    showPanel("systemInfo");
+  async function fetchSystemInfo() {
     if (systemLoaded) return;
     systemLoading = true;
-    status = "시스템 정보 수집 중...";
     progressValue = null;
     try {
       systemItems = await invoke<SystemInfoItem[]>("get_system_info");
       systemLoaded = true;
-      status = "시스템 정보 수집 완료";
     } catch (e) {
-      status = `오류: ${e}`;
+      status = `시스템 정보 오류: ${e}`;
     } finally {
       systemLoading = false;
       progressValue = null;
     }
   }
 
-  async function refreshSystemInfo() {
-    systemLoaded = false;
-    await loadSystemInfo();
-  }
-
-  async function loadVirtStatus() {
-    showPanel("virtualization");
+  async function fetchVirtStatus() {
     virtLoading = true;
-    status = "가상화 설정 점검 중...";
     progressValue = null;
     try {
       virtItems = await invoke<VirtItem[]>("get_virtualization_status");
       virtChecked = true;
-      status = "가상화 설정 점검 완료";
     } catch (e) {
-      status = `오류: ${e}`;
+      status = `가상화 점검 오류: ${e}`;
     } finally {
       virtLoading = false;
       progressValue = null;
     }
+  }
+
+  async function loadSystemInfo() {
+    showPanel("systemInfo");
+    if (systemLoaded) return;
+    status = "시스템 정보 수집 중...";
+    await fetchSystemInfo();
+    status = "시스템 정보 수집 완료";
+  }
+
+  async function refreshSystemInfo() {
+    systemLoaded = false;
+    showPanel("systemInfo");
+    status = "시스템 정보 수집 중...";
+    await fetchSystemInfo();
+    status = "시스템 정보 수집 완료";
+  }
+
+  async function loadVirtStatus() {
+    showPanel("virtualization");
+    status = "가상화 설정 점검 중...";
+    await fetchVirtStatus();
+    status = "가상화 설정 점검 완료";
   }
 
   async function exportSystemCsv() {
@@ -257,7 +273,10 @@
   <main class="flex-1 overflow-hidden p-4">
     {#if currentPanel === "menu"}
       <MenuPanel
-        virtChecked={virtChecked}
+        {systemLoading}
+        {systemLoaded}
+        {virtLoading}
+        {virtChecked}
         actionGroupCount={actionCount(virtItems)}
         onLoadSystemInfo={loadSystemInfo}
         onLoadVirtStatus={loadVirtStatus}
