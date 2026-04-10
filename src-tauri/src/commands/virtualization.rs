@@ -24,6 +24,7 @@ fn collect_virtualization_status() -> anyhow::Result<Vec<VirtualizationItem>> {
     check_wsl_status(&mut items);
     check_hypervisor_launch(&mut items);
     check_registry_manifest_status(&mut items);
+    check_windows_hello_status(&mut items);
 
     Ok(items)
 }
@@ -306,4 +307,131 @@ fn build_excluded_legacy_registry_item(
         .with_source(VirtualizationSource::Registry)
         .with_disable_group(entry.disable_group, false)
         .with_manifest_id(entry.id)
+}
+
+// ── Windows Hello / WHfB 상태 ─────────────────────────────────────────────
+
+fn check_windows_hello_status(items: &mut Vec<VirtualizationItem>) {
+    if !is_windows_hello_active() {
+        return;
+    }
+
+    let Some(whfb_type) = detect_whfb_type() else {
+        return; // 기본 Windows Hello — VBS 무관
+    };
+
+    let (can_disable, disable_reason) = check_whfb_disableable();
+
+    let status = if can_disable {
+        "WHfB 활성 — 해제 가능"
+    } else {
+        "WHfB 활성 — 해제 불가"
+    };
+
+    let recommendation = if can_disable {
+        "VBS 비활성화 전 해제 권장: 설정 → 계정 → 회사 또는 학교 액세스 → 연결 끊기".to_string()
+    } else {
+        format!("VBS 설정이 재부팅 후 복구될 수 있습니다 — {}", disable_reason)
+    };
+
+    items.push(
+        VirtualizationItem::new(
+            "Windows Hello",
+            status,
+            &format!("감지 유형: {}", whfb_type),
+            &recommendation,
+        )
+        .with_source(VirtualizationSource::Registry)
+        .with_manifest_id("whfb_check"),
+    );
+}
+
+#[cfg(windows)]
+fn is_windows_hello_active() -> bool {
+    use std::path::Path;
+    let ngc = Path::new(
+        r"C:\Windows\ServiceProfiles\LocalService\AppData\Local\Microsoft\Ngc",
+    );
+    ngc.exists() && ngc.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false)
+}
+
+#[cfg(not(windows))]
+fn is_windows_hello_active() -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn detect_whfb_type() -> Option<String> {
+    let aad_joined = reg::key_has_subkeys(
+        r"SYSTEM\CurrentControlSet\Control\CloudDomainJoin\JoinInfo",
+    );
+    let policy_enabled = reg::get_dword(
+        r"SOFTWARE\Policies\Microsoft\PassportForWork",
+        "Enabled",
+    )
+    .map(|v| v == 1)
+    .unwrap_or(false);
+    let mdm_enrolled = has_mdm_corporate_enrollment();
+
+    if policy_enabled {
+        Some("GPO/MDM 정책 적용".to_string())
+    } else if aad_joined {
+        Some("Azure AD 조인".to_string())
+    } else if mdm_enrolled {
+        Some("MDM 등록".to_string())
+    } else {
+        None
+    }
+}
+
+#[cfg(not(windows))]
+fn detect_whfb_type() -> Option<String> {
+    None
+}
+
+#[cfg(windows)]
+fn check_whfb_disableable() -> (bool, String) {
+    let policy_enabled = reg::get_dword(
+        r"SOFTWARE\Policies\Microsoft\PassportForWork",
+        "Enabled",
+    )
+    .map(|v| v == 1)
+    .unwrap_or(false);
+
+    if policy_enabled {
+        return (
+            false,
+            "GPO/MDM 정책으로 강제 적용 중 — IT 관리자 확인 필요".to_string(),
+        );
+    }
+
+    if has_mdm_corporate_enrollment() {
+        return (
+            false,
+            "기업 MDM 관리 기기 — IT 관리자 확인 필요".to_string(),
+        );
+    }
+
+    (true, String::new())
+}
+
+#[cfg(not(windows))]
+fn check_whfb_disableable() -> (bool, String) {
+    (false, String::new())
+}
+
+#[cfg(windows)]
+fn has_mdm_corporate_enrollment() -> bool {
+    reg::list_subkeys(r"SOFTWARE\Microsoft\Enrollments")
+        .into_iter()
+        .any(|subkey| {
+            let path = format!(r"SOFTWARE\Microsoft\Enrollments\{}", subkey);
+            // EnrollmentType 6 = MDM, 13 = AAD MDM
+            matches!(reg::get_dword(&path, "EnrollmentType"), Some(6) | Some(13))
+        })
+}
+
+#[cfg(not(windows))]
+fn has_mdm_corporate_enrollment() -> bool {
+    false
 }

@@ -9,6 +9,7 @@
     disableLog: string[];
     disableOptions: DisableOptions;
     selectedTaskCount: number;
+    whfbDetected: boolean;
     onRunDisable: () => void;
     onRequestReboot: () => void;
     onLoadVirtStatus: () => void;
@@ -22,6 +23,7 @@
     disableLog,
     disableOptions,
     selectedTaskCount,
+    whfbDetected,
     onRunDisable,
     onRequestReboot,
     onLoadVirtStatus,
@@ -31,6 +33,13 @@
 
 <div class="flex flex-col gap-2.5 h-full">
   <h2 class="text-base font-bold text-gray-800 shrink-0">VBS 및 Hyper-V 비활성화</h2>
+
+  {#if whfbDetected}
+    <div class="bg-amber-50 border border-amber-300 rounded-xl p-3 text-sm shrink-0">
+      <p class="font-bold text-amber-800 mb-1">⚠️ Windows Hello for Business 감지됨</p>
+      <p class="text-xs text-amber-700">VBS 레지스트리는 재부팅 후 복구될 수 있습니다. 가상화 점검 결과의 <span class="font-semibold">Windows Hello</span> 항목을 먼저 확인하세요.</p>
+    </div>
+  {/if}
 
   <div class="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-800 shrink-0">
     <p class="font-bold mb-1.5">⚠️ 이 작업은 다음을 수행합니다</p>

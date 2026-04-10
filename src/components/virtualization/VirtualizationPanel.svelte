@@ -77,12 +77,13 @@
         <tbody>
           {#each virtItems as item, i}
             {@const isReference = item.status.includes("(참고)")}
-            <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isReference ? 'hover:bg-slate-50' : item.action_required ? 'hover:bg-red-50' : item.status.includes('확인 불가') ? 'hover:bg-gray-100' : 'hover:bg-green-50'} transition-colors align-top">
+            {@const isWhfbCheck = item.manifest_id === "whfb_check"}
+            <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isReference ? 'hover:bg-slate-50' : isWhfbCheck ? 'hover:bg-amber-50' : item.action_required ? 'hover:bg-red-50' : item.status.includes('확인 불가') ? 'hover:bg-gray-100' : 'hover:bg-green-50'} transition-colors align-top">
               <td class="px-3 py-2 border-b font-medium text-gray-800 text-xs align-top break-words">{item.category}</td>
               <td class="px-3 py-2 border-b align-top">
                 <StatusBadge
                   label={item.status}
-                  tone={isReference ? "neutral" : item.action_required ? "danger" : item.status.includes("확인 불가") ? "neutral" : "success"}
+                  tone={isReference ? "neutral" : isWhfbCheck ? "info" : item.action_required ? "danger" : item.status.includes("확인 불가") ? "neutral" : "success"}
                   className="font-medium"
                 />
               </td>
