@@ -1,5 +1,24 @@
 # Changelog
 
+## [beta-v26.04.01.0008] - 2026-04-10
+
+### Added
+- beta / release GitHub Actions에 내부용 코드 서명 단계 추가
+  - `WINDOWS_CODESIGN_PFX_BASE64`
+  - `WINDOWS_CODESIGN_PFX_PASSWORD`
+  - `WINDOWS_CODESIGN_TIMESTAMP_URL`(선택)
+- 공용 PowerShell 서명 스크립트 추가
+  - `.github/scripts/sign_windows_binary.ps1`
+
+### Changed
+- 내부 배포 환경을 고려해 self-signed / 사설 CA PFX 인증서로도 릴리즈 EXE를 서명할 수 있게 워크플로를 구성
+- 서명 secret 이 없을 때는 빌드를 깨지 않고 summary에 skip 사유를 남기도록 조정
+
+### Note
+- 자체 서명만으로는 일반 외부 PC의 SmartScreen 경고가 자동으로 사라지지 않을 수 있으며, 내부 배포 대상 PC에 루트/중간 인증서 신뢰 배포가 필요함
+
+---
+
 ## [beta-v26.04.01.0007] - 2026-04-10
 
 ### Added
