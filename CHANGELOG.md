@@ -1,5 +1,47 @@
 # Changelog
 
+## [Release-v26.04.01] - 2026-04-10
+
+### 주요 변경사항 요약
+
+#### 자동 점검 및 CSV 자동 저장
+- 앱 시작 시 시스템 정보 + 가상화 점검을 자동 수행
+- 점검 결과를 `vmc_logs/` 하위에 CSV 2개로 자동 저장
+  - `YYMMDD_HHMMSS_{HostName}-SystemInfo.csv`
+  - `YYMMDD_HHMMSS_{HostName}-reg.csv`
+
+#### 시작 점검 화면 (`InspectionSummaryModal`)
+- 진행률 바 + 퍼센트 + 현재 수집 항목 실시간 표시
+- 점검 완료 후 조치 필요 항목 요약 표시
+- Windows Hello for Business 감지 시 경고 카드 표시 및 조치 시작 버튼 비활성화
+
+#### 비활성화 조치 모달 (`DisableActionModal`)
+- warning → running → complete 3단계 전체화면 UI
+  - **warning**: 조치 예정 항목 목록 + 주의사항 표시
+  - **running**: 프로그레스바 + 퍼센트 + 현재 진행 항목 실시간 표시
+  - **complete**: 조치 완료 후 재부팅 분기
+    - 예 → 5초 후 자동 재부팅
+    - 아니요 → 수동 재부팅 안내 후 닫기
+
+#### 로그 및 백업 자동 저장
+- 비활성화 실행 후 운영 로그 자동 저장: `vmc_logs/YYMMDD_HHMMSS_{HostName}.log`
+- 레지스트리 수정 전 백업 자동 저장: `vmc_backup/YYMMDD_HHMMSS_backup.reg`
+
+#### Registry Manifest
+- `DisableWrite` / `InspectOnly` / `ExcludedLegacy` 분류 기반 점검·조치 단일 source of truth
+- 선택적 비활성화: 가상화 점검 결과 기반 필요 그룹만 실행
+
+#### UI / 창 설정
+- 창 크기 `660x640` 고정 (`resizable: false`, `maximizable: false`)
+- 닫기 버튼과 Footer 사이 여백 추가
+- 시작 점검 화면 footer에 실제 앱 버전 표시
+
+#### 배포 인프라
+- GitHub Actions beta / release 워크플로에 내부 코드 서명 단계 추가
+- nightly 자동 빌드 워크플로 제거
+
+---
+
 ## [beta-v26.04.01.0024] - 2026-04-10
 
 ### Added
