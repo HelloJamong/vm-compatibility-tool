@@ -1,8 +1,9 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
   import { save } from "@tauri-apps/plugin-dialog";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import AppHeader from "./components/layout/AppHeader.svelte";
   import StatusBar from "./components/layout/StatusBar.svelte";
   import ConfirmDialog from "./components/common/ConfirmDialog.svelte";
@@ -35,12 +36,23 @@
   let inspectionModalOpen = $state(true);
   let inspectionResultPath = $state<string | null>(null);
   let inspectionResultSaveError = $state<string | null>(null);
+  let inspectionProgress = $state(0);
+  let inspectionStage = $state<"idle" | "collecting" | "saving" | "complete">("idle");
+  let systemDone = $state(false);
+  let virtDone = $state(false);
 
   let disableLog = $state<string[]>([]);
   let disableRunning = $state(false);
   let disableComplete = $state(false);
   let rebootConfirmOpen = $state(false);
   let progressValue = $state<number | null>(null);
+  let inspectionProgressTimer: ReturnType<typeof setInterval> | null = null;
+
+  onDestroy(() => {
+    if (inspectionProgressTimer) {
+      clearInterval(inspectionProgressTimer);
+    }
+  });
 
   onMount(async () => {
     try {
@@ -50,17 +62,24 @@
     }
     // 앱 시작 시 자동 점검 — 패널 전환 없이 백그라운드 실행
     status = "자동 점검 시작 중...";
+    inspectionStage = "collecting";
+    startInspectionProgressTimer();
     await Promise.all([fetchSystemInfo(), fetchVirtStatus()]);
 
+    inspectionStage = "saving";
     try {
       inspectionResultPath = await invoke<string>("export_csv_auto", {
-        dataType: "virtualization",
-        systemItems: null,
+        dataType: "inspection",
+        systemItems,
         virtItems,
       });
     } catch (e) {
       inspectionResultSaveError = `${e}`;
     }
+
+    inspectionStage = "complete";
+    inspectionProgress = 100;
+    stopInspectionProgressTimer();
 
     status = inspectionResultPath
       ? `점검 완료 — ${basename(inspectionResultPath)} 저장됨`
@@ -75,9 +94,11 @@
     if (systemLoaded) return;
     systemLoading = true;
     progressValue = null;
+    systemDone = false;
     try {
       systemItems = await invoke<SystemInfoItem[]>("get_system_info");
       systemLoaded = true;
+      systemDone = true;
     } catch (e) {
       status = `시스템 정보 오류: ${e}`;
     } finally {
@@ -89,9 +110,11 @@
   async function fetchVirtStatus() {
     virtLoading = true;
     progressValue = null;
+    virtDone = false;
     try {
       virtItems = await invoke<VirtItem[]>("get_virtualization_status");
       virtChecked = true;
+      virtDone = true;
     } catch (e) {
       status = `가상화 점검 오류: ${e}`;
     } finally {
@@ -217,8 +240,8 @@
     rebootConfirmOpen = true;
   }
 
-  function closeInspectionModal() {
-    inspectionModalOpen = false;
+  async function closeInspectionModal() {
+    await getCurrentWindow().close();
   }
 
   function startInspectionActions() {
@@ -301,10 +324,7 @@
   }
 
   function inspectionProgressPercent(): number {
-    if (systemLoaded && virtChecked) return 100;
-    if (systemLoaded || virtChecked) return 55;
-    if (systemLoading || virtLoading) return 15;
-    return 0;
+    return inspectionProgress;
   }
 
   function inspectionActionSummaries(items: VirtItem[]): string[] {
@@ -316,6 +336,33 @@
         return `${item.category}: ${detail}`;
       });
   }
+
+  function startInspectionProgressTimer() {
+    stopInspectionProgressTimer();
+    inspectionProgress = 3;
+    inspectionProgressTimer = setInterval(() => {
+      const target = inspectionStageTarget();
+      if (inspectionProgress >= target) return;
+      const delta = Math.max(1, Math.ceil((target - inspectionProgress) / 7));
+      inspectionProgress = Math.min(target, inspectionProgress + delta);
+    }, 180);
+  }
+
+  function stopInspectionProgressTimer() {
+    if (inspectionProgressTimer) {
+      clearInterval(inspectionProgressTimer);
+      inspectionProgressTimer = null;
+    }
+  }
+
+  function inspectionStageTarget(): number {
+    if (inspectionStage === "complete") return 100;
+    if (inspectionStage === "saving") return 92;
+    if (systemDone && virtDone) return 88;
+    if (systemDone || virtDone) return 64;
+    if (inspectionStage === "collecting") return 38;
+    return 8;
+  }
 </script>
 
 {#if inspectionModalOpen}
@@ -326,6 +373,7 @@
     actionSummaries={inspectionActionSummaries(virtItems)}
     savedFilename={basename(inspectionResultPath)}
     saveError={inspectionResultSaveError}
+    {version}
     onStartAction={startInspectionActions}
     onClose={closeInspectionModal}
   />
@@ -333,7 +381,7 @@
   <div class="flex flex-col h-screen bg-gray-50 select-none">
     <AppHeader currentPanel={currentPanel} onBack={() => showPanel("menu")} />
 
-    <main class="flex-1 overflow-hidden p-4">
+    <main class="flex-1 overflow-hidden">
       {#if currentPanel === "menu"}
         <MenuPanel
           {systemLoading}

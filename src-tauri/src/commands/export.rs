@@ -98,6 +98,34 @@ fn write_csv(
                 }
             }
         }
+        "inspection" => {
+            content.push_str("[시스템 정보]\n");
+            content.push_str("항목,세부 정보,값\n");
+            if let Some(items) = system_items {
+                for item in items {
+                    content.push_str(&format!(
+                        "{},{},{}\n",
+                        escape_csv(&item.category),
+                        escape_csv(&item.item),
+                        escape_csv(&item.value),
+                    ));
+                }
+            }
+
+            content.push_str("\n[가상화 점검 결과]\n");
+            content.push_str("항목,상태,상세 정보,권장사항\n");
+            if let Some(items) = virt_items {
+                for item in items {
+                    content.push_str(&format!(
+                        "{},{},{},{}\n",
+                        escape_csv(&item.category),
+                        escape_csv(&item.status),
+                        escape_csv(&item.details),
+                        escape_csv(&item.recommendation),
+                    ));
+                }
+            }
+        }
         _ => {}
     }
 

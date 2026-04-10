@@ -6,6 +6,7 @@
     actionSummaries: string[];
     savedFilename: string | null;
     saveError: string | null;
+    version: string;
     onStartAction: () => void;
     onClose: () => void;
   };
@@ -17,6 +18,7 @@
     actionSummaries,
     savedFilename,
     saveError,
+    version,
     onStartAction,
     onClose,
   }: Props = $props();
@@ -105,7 +107,7 @@
       </div>
 
       <div class="inspection-footer">
-        <p class="version">VM Compatibility Tool Startup Scan</p>
+        <p class="version">{version}</p>
       </div>
     </div>
   </div>
@@ -119,20 +121,17 @@
   .inspection-screen {
     min-height: 100vh;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: center;
-    padding: 24px 16px;
+    padding: 0;
     background: linear-gradient(180deg, #eef3fa 0%, #f5f7fb 100%);
     box-sizing: border-box;
   }
 
   .inspection-panel {
-    width: min(100%, 472px);
-    min-height: 770px;
+    width: 100%;
+    min-height: 100vh;
     background: #ffffff;
-    border: 1px solid #e8eef6;
-    box-shadow: 0 10px 30px rgba(31, 61, 120, 0.08);
-    overflow: hidden;
     display: flex;
     flex-direction: column;
     background-image: linear-gradient(180deg, #f7f9fc 0%, #f7f9fc 83%, #e8edf4 83%, #e8edf4 100%);
@@ -140,7 +139,7 @@
 
   .inspection-content {
     flex: 1;
-    padding: 36px 18px 0;
+    padding: 28px 16px 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -186,6 +185,7 @@
 
   .summary-card {
     width: 100%;
+    max-width: 520px;
     margin-top: 34px;
     border: 1px solid #dce5f0;
     border-radius: 18px;
@@ -295,6 +295,7 @@
 
   .actions {
     width: 100%;
+    max-width: 520px;
     margin-top: 36px;
     display: flex;
     flex-direction: column;
@@ -366,5 +367,11 @@
     color: #9aa8bc;
     text-transform: uppercase;
     text-align: center;
+  }
+
+  @media (min-width: 640px) {
+    .inspection-content {
+      padding: 36px 24px 0;
+    }
   }
 </style>
