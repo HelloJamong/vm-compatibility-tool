@@ -13,9 +13,9 @@
     "windows": [
       {
         "title": "VM Compatibility Tool",
-        "width": 980,
+        "width": 660,
         "height": 640,
-        "minWidth": 820,
+        "minWidth": 560,
         "minHeight": 560,
         "resizable": true,
         "center": true

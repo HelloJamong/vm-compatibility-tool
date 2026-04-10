@@ -352,10 +352,37 @@
     inspectionProgress = 3;
     inspectionCurrentAction = "시스템 점검 준비 중...";
     inspectionProgressTimer = setInterval(() => {
-      const target = inspectionStageTarget();
-      if (inspectionProgress >= target) return;
-      const delta = Math.max(1, Math.ceil((target - inspectionProgress) / 7));
-      inspectionProgress = Math.min(target, inspectionProgress + delta);
+      if (inspectionStage === "complete") {
+        inspectionProgress = 100;
+        return;
+      }
+
+      if (inspectionStage === "saving") {
+        const target = 97;
+        if (inspectionProgress < target) {
+          inspectionProgress = Math.min(
+            target,
+            inspectionProgress + Math.max(1, Math.ceil((target - inspectionProgress) / 8))
+          );
+        }
+      } else if (systemDone || virtDone) {
+        const target = 95;
+        if (inspectionProgress < target) {
+          inspectionProgress = Math.min(
+            target,
+            inspectionProgress + Math.max(1, Math.ceil((target - inspectionProgress) / 12))
+          );
+        }
+      } else {
+        const target = 78;
+        if (inspectionProgress < target) {
+          inspectionProgress = Math.min(
+            target,
+            inspectionProgress + Math.max(1, Math.ceil((target - inspectionProgress) / 16))
+          );
+        }
+      }
+
       inspectionCurrentAction = nextInspectionAction();
     }, 180);
   }
@@ -366,16 +393,6 @@
       inspectionProgressTimer = null;
     }
   }
-
-  function inspectionStageTarget(): number {
-    if (inspectionStage === "complete") return 100;
-    if (inspectionStage === "saving") return 92;
-    if (systemDone && virtDone) return 88;
-    if (systemDone || virtDone) return 82;
-    if (inspectionStage === "collecting") return 68;
-    return 8;
-  }
-
   function nextInspectionAction(): string {
     if (inspectionStage === "saving") return "점검 결과 CSV 저장 중...";
     if (inspectionStage === "complete") return "점검 완료";
