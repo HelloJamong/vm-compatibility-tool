@@ -1,5 +1,26 @@
 # Changelog
 
+## [beta-v26.04.01.0007] - 2026-04-10
+
+### Added
+- 작업 기준 문서 통합
+  - `docs/unified-project-plan.md` 추가
+  - 기능 정의 / 현재 상태 / TODO / 우선순위를 단일 문서 기준으로 정리
+- Stage 4 설계 문서 추가
+  - `docs/stage4-system-info-auto-save-plan.md`
+  - 시스템 정보 CSV 자동 저장 구현 전 검토용 설계안 작성
+
+### Changed
+- `.claude/CLAUDE.md`를 중복 상태 문서에서 Claude/Codex 공용 포인터 문서로 단순화
+- 정리 단계에 맞춰 저장소 기준 문서 역할을 `docs/unified-project-plan.md` 중심으로 재정렬
+
+### Fixed
+- Rust 모델에 `DisableOutput` 정의를 반영해 현재 비활성화 결과 구조와 프론트 타입 계약을 일치시킴
+- `App.svelte`의 미사용 helper 제거로 사전 정리 상태를 정돈
+- `.claude/settings.local.json`을 ignore에 추가해 로컬 전용 설정 파일이 추적되지 않도록 보완
+
+---
+
 ## [beta-v26.04.01.0006] - 2026-04-10
 
 ### Fixed
