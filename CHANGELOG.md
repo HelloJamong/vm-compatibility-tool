@@ -1,5 +1,14 @@
 # Changelog
 
+## [beta-v26.04.01.0023] - 2026-04-10
+
+### Changed
+- 레지스트리 백업 파일 저장 위치를 `vmc_logs`에서 `vmc_backup` 폴더로 분리
+  - 운영 로그: `vmc_logs/YYMMDD_HHMMSS_{HostName}.log` (기존 유지)
+  - 레지스트리 백업: `vmc_backup/YYMMDD_HHMMSS_backup.reg` (신규)
+
+---
+
 ## [beta-v26.04.01.0022] - 2026-04-10
 
 ### Added
