@@ -1,5 +1,17 @@
 # Changelog
 
+## [beta-v26.04.01.0011] - 2026-04-10
+
+### Removed
+- 더 이상 사용하지 않는 nightly GitHub Actions 워크플로 제거
+  - `.github/workflows/nightly.yml`
+
+### Changed
+- README 배포 설명을 현재 운영 기준인 beta / release 파이프라인 중심으로 정리
+- nightly 브랜치는 히스토리 보존 용도로 남기고, 자동 빌드 대상에서는 제외
+
+---
+
 ## [beta-v26.04.01.0010] - 2026-04-10
 
 ### Added

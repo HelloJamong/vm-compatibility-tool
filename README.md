@@ -143,7 +143,7 @@ src-tauri/src/services/    Windows/WMI/Registry/Process 서비스
 src-tauri/src/models/      Rust 직렬화 모델
 src-tauri/src/main.rs      관리자 권한 확인 + 앱 진입점
 src-tauri/build.rs         Windows manifest / Tauri build 설정
-.github/workflows/         nightly / beta / release 빌드 파이프라인
+.github/workflows/         beta / release 빌드 파이프라인
 docs/                      수동 QA 및 프로젝트 문서
 ```
 
@@ -167,10 +167,9 @@ cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
 ## 배포 / 버전 관리
 
 버전은 `CHANGELOG.md` 최신 항목을 기준으로 관리합니다.
-GitHub Actions가 해당 버전을 읽어 beta / nightly / release 빌드에 주입합니다.
+GitHub Actions가 해당 버전을 읽어 beta / release 빌드에 주입합니다.
 
 예시:
-- `nightly-vYY.MM.DD.####`
 - `beta-vYY.MM.DD.####`
 - `Release-vYY.MM.DD`
 
