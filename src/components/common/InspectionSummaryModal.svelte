@@ -29,7 +29,7 @@
 </script>
 
 {#if open}
-  <div class="fixed inset-0 z-40 bg-slate-950/38 backdrop-blur-[2px] flex items-center justify-center p-4">
+  <div class="flex min-h-screen w-full items-center justify-center bg-[linear-gradient(180deg,#eef3fa_0%,#f5f7fb_100%)] px-4 py-6">
     <div class="w-full max-w-[472px] overflow-hidden border border-[#e8eef6] bg-white shadow-[0_10px_30px_rgba(31,61,120,0.08)]">
       <div class="flex min-h-[770px] flex-col bg-[linear-gradient(180deg,#f7f9fc_0%,#f7f9fc_83%,#e8edf4_83%,#e8edf4_100%)]">
         <div class="flex-1 px-[18px] pt-9">

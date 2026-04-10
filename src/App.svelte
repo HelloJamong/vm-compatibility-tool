@@ -318,75 +318,7 @@
   }
 </script>
 
-<div class="flex flex-col h-screen bg-gray-50 select-none">
-  <AppHeader currentPanel={currentPanel} onBack={() => showPanel("menu")} />
-
-  <main class="flex-1 overflow-hidden p-4">
-    {#if currentPanel === "menu"}
-      <MenuPanel
-        {systemLoading}
-        {systemLoaded}
-        {virtLoading}
-        {virtChecked}
-        actionGroupCount={actionCount(virtItems)}
-        onLoadSystemInfo={loadSystemInfo}
-        onLoadVirtStatus={loadVirtStatus}
-        onShowDisable={() => showPanel("disable")}
-      />
-    {:else if currentPanel === "systemInfo"}
-      <SystemInfoPanel
-        {systemLoading}
-        {systemItems}
-        onRefresh={refreshSystemInfo}
-        onExport={exportSystemCsv}
-      />
-    {:else if currentPanel === "virtualization"}
-      <VirtualizationPanel
-        {virtLoading}
-        {virtChecked}
-        {virtItems}
-        actionGroupCount={actionCount(virtItems)}
-        actionItemTotal={actionItemCount(virtItems)}
-        healthyItemTotal={healthyItemCount(virtItems)}
-        unknownItemTotal={unknownItemCount(virtItems)}
-        onReload={loadVirtStatus}
-        onExport={exportVirtCsv}
-        onShowDisable={() => showPanel("disable")}
-      />
-    {:else if currentPanel === "disable"}
-      <DisablePanel
-        {virtChecked}
-        {disableRunning}
-        {disableComplete}
-        {disableLog}
-        disableOptions={computeDisableOptions(virtItems)}
-        selectedTaskCount={selectedTaskCount(computeDisableOptions(virtItems))}
-        whfbDetected={hasWhfbWarning(virtItems)}
-        onRunDisable={runDisable}
-        onRequestReboot={requestReboot}
-        onLoadVirtStatus={loadVirtStatus}
-        {logLineClass}
-      />
-    {/if}
-  </main>
-
-  <StatusBar
-    {status}
-    {version}
-    isBusy={systemLoading || virtLoading || disableRunning}
-    {progressValue}
-  />
-
-  <ConfirmDialog
-    open={rebootConfirmOpen}
-    title="지금 재부팅할까요?"
-    message="확인을 누르면 5초 후 자동으로 재부팅됩니다."
-    bullets={rebootBullets}
-    confirmLabel="재부팅 예약"
-    onConfirm={confirmReboot}
-    onCancel={() => (rebootConfirmOpen = false)}
-  />
-
+{#if inspectionModalOpen}
   <InspectionSummaryModal
     open={inspectionModalOpen}
     complete={systemLoaded && virtChecked}
@@ -397,4 +329,74 @@
     onStartAction={startInspectionActions}
     onClose={closeInspectionModal}
   />
-</div>
+{:else}
+  <div class="flex flex-col h-screen bg-gray-50 select-none">
+    <AppHeader currentPanel={currentPanel} onBack={() => showPanel("menu")} />
+
+    <main class="flex-1 overflow-hidden p-4">
+      {#if currentPanel === "menu"}
+        <MenuPanel
+          {systemLoading}
+          {systemLoaded}
+          {virtLoading}
+          {virtChecked}
+          actionGroupCount={actionCount(virtItems)}
+          onLoadSystemInfo={loadSystemInfo}
+          onLoadVirtStatus={loadVirtStatus}
+          onShowDisable={() => showPanel("disable")}
+        />
+      {:else if currentPanel === "systemInfo"}
+        <SystemInfoPanel
+          {systemLoading}
+          {systemItems}
+          onRefresh={refreshSystemInfo}
+          onExport={exportSystemCsv}
+        />
+      {:else if currentPanel === "virtualization"}
+        <VirtualizationPanel
+          {virtLoading}
+          {virtChecked}
+          {virtItems}
+          actionGroupCount={actionCount(virtItems)}
+          actionItemTotal={actionItemCount(virtItems)}
+          healthyItemTotal={healthyItemCount(virtItems)}
+          unknownItemTotal={unknownItemCount(virtItems)}
+          onReload={loadVirtStatus}
+          onExport={exportVirtCsv}
+          onShowDisable={() => showPanel("disable")}
+        />
+      {:else if currentPanel === "disable"}
+        <DisablePanel
+          {virtChecked}
+          {disableRunning}
+          {disableComplete}
+          {disableLog}
+          disableOptions={computeDisableOptions(virtItems)}
+          selectedTaskCount={selectedTaskCount(computeDisableOptions(virtItems))}
+          whfbDetected={hasWhfbWarning(virtItems)}
+          onRunDisable={runDisable}
+          onRequestReboot={requestReboot}
+          onLoadVirtStatus={loadVirtStatus}
+          {logLineClass}
+        />
+      {/if}
+    </main>
+
+    <StatusBar
+      {status}
+      {version}
+      isBusy={systemLoading || virtLoading || disableRunning}
+      {progressValue}
+    />
+
+    <ConfirmDialog
+      open={rebootConfirmOpen}
+      title="지금 재부팅할까요?"
+      message="확인을 누르면 5초 후 자동으로 재부팅됩니다."
+      bullets={rebootBullets}
+      confirmLabel="재부팅 예약"
+      onConfirm={confirmReboot}
+      onCancel={() => (rebootConfirmOpen = false)}
+    />
+  </div>
+{/if}
