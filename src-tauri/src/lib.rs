@@ -13,6 +13,7 @@ pub fn run() {
             commands::disable::execute_disable,
             commands::disable::request_reboot,
             commands::export::export_csv,
+            commands::export::export_csv_auto,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -26,3 +26,6 @@ Thumbs.db
 *.log
 *.tmp
 *.pid
+
+# Local design references
+design_sample.html

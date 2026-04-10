@@ -6,6 +6,7 @@
   import AppHeader from "./components/layout/AppHeader.svelte";
   import StatusBar from "./components/layout/StatusBar.svelte";
   import ConfirmDialog from "./components/common/ConfirmDialog.svelte";
+  import InspectionSummaryModal from "./components/common/InspectionSummaryModal.svelte";
   import MenuPanel from "./components/menu/MenuPanel.svelte";
   import SystemInfoPanel from "./components/system/SystemInfoPanel.svelte";
   import VirtualizationPanel from "./components/virtualization/VirtualizationPanel.svelte";
@@ -31,6 +32,9 @@
   let virtItems = $state<VirtItem[]>([]);
   let virtLoading = $state(false);
   let virtChecked = $state(false);
+  let inspectionModalOpen = $state(true);
+  let inspectionResultPath = $state<string | null>(null);
+  let inspectionResultSaveError = $state<string | null>(null);
 
   let disableLog = $state<string[]>([]);
   let disableRunning = $state(false);
@@ -47,7 +51,20 @@
     // 앱 시작 시 자동 점검 — 패널 전환 없이 백그라운드 실행
     status = "자동 점검 시작 중...";
     await Promise.all([fetchSystemInfo(), fetchVirtStatus()]);
-    status = "점검 완료 — 비활성화 준비됨";
+
+    try {
+      inspectionResultPath = await invoke<string>("export_csv_auto", {
+        dataType: "virtualization",
+        systemItems: null,
+        virtItems,
+      });
+    } catch (e) {
+      inspectionResultSaveError = `${e}`;
+    }
+
+    status = inspectionResultPath
+      ? `점검 완료 — ${basename(inspectionResultPath)} 저장됨`
+      : "점검 완료 — 비활성화 준비됨";
   });
 
   function showPanel(panel: Panel) {
@@ -200,6 +217,15 @@
     rebootConfirmOpen = true;
   }
 
+  function closeInspectionModal() {
+    inspectionModalOpen = false;
+  }
+
+  function startInspectionActions() {
+    inspectionModalOpen = false;
+    showPanel("disable");
+  }
+
   async function confirmReboot() {
     try {
       await invoke("request_reboot");
@@ -269,6 +295,27 @@
     "실행 중인 작업은 모두 저장하세요.",
     "변경 사항 적용을 위해 시스템 재시작이 필요합니다.",
   ];
+
+  function basename(path: string | null): string | null {
+    return path?.split(/[\\/]/).pop() ?? null;
+  }
+
+  function inspectionProgressPercent(): number {
+    if (systemLoaded && virtChecked) return 100;
+    if (systemLoaded || virtChecked) return 55;
+    if (systemLoading || virtLoading) return 15;
+    return 0;
+  }
+
+  function inspectionActionSummaries(items: VirtItem[]): string[] {
+    return items
+      .filter((item) => item.action_required && item.manifest_id !== "whfb_check")
+      .slice(0, 4)
+      .map((item) => {
+        const detail = item.recommendation?.trim() || item.status;
+        return `${item.category}: ${detail}`;
+      });
+  }
 </script>
 
 <div class="flex flex-col h-screen bg-gray-50 select-none">
@@ -338,5 +385,16 @@
     confirmLabel="재부팅 예약"
     onConfirm={confirmReboot}
     onCancel={() => (rebootConfirmOpen = false)}
+  />
+
+  <InspectionSummaryModal
+    open={inspectionModalOpen}
+    complete={systemLoaded && virtChecked}
+    progressPercent={inspectionProgressPercent()}
+    actionSummaries={inspectionActionSummaries(virtItems)}
+    savedFilename={basename(inspectionResultPath)}
+    saveError={inspectionResultSaveError}
+    onStartAction={startInspectionActions}
+    onClose={closeInspectionModal}
   />
 </div>
