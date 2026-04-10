@@ -287,6 +287,17 @@ pub fn disable_write_entries(group: DisableGroup) -> Vec<ResolvedRegistryManifes
         .collect()
 }
 
+pub fn selected_optional_entries(ids: &[String]) -> Vec<ResolvedRegistryManifestEntry> {
+    MANIFEST
+        .iter()
+        .filter(|entry| {
+            entry.action == RegistryAction::ExcludedLegacy
+                && ids.iter().any(|selected_id| selected_id == entry.id)
+        })
+        .flat_map(resolve_entry_paths)
+        .collect()
+}
+
 pub fn resolve_entry_paths(entry: &RegistryManifestEntry) -> Vec<ResolvedRegistryManifestEntry> {
     let paths = match entry.hive_set {
         RegistryHiveSet::CurrentOnly | RegistryHiveSet::PoliciesOnly => {
@@ -315,7 +326,10 @@ pub fn resolve_entry_paths(entry: &RegistryManifestEntry) -> Vec<ResolvedRegistr
 
 #[cfg(test)]
 mod tests {
-    use super::{disable_write_entries, resolve_entry_paths, RegistryAction, RegistryHiveSet, MANIFEST};
+    use super::{
+        disable_write_entries, resolve_entry_paths, selected_optional_entries, RegistryAction,
+        RegistryHiveSet, MANIFEST,
+    };
     use crate::models::virtualization::DisableGroup;
 
     #[test]
@@ -350,5 +364,23 @@ mod tests {
 
         assert!(inspectable_ids.contains(&"legacy.system_guard_enabled"));
         assert!(inspectable_ids.contains(&"legacy.configure_system_guard_launch"));
+    }
+
+    #[test]
+    fn selected_optional_entries_expand_only_requested_legacy_ids() {
+        let entries = selected_optional_entries(&[
+            "legacy.system_guard_enabled".to_string(),
+            "legacy.configure_system_guard_launch".to_string(),
+        ]);
+
+        assert!(entries
+            .iter()
+            .any(|entry| entry.id == "legacy.system_guard_enabled"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry.id == "legacy.configure_system_guard_launch"));
+        assert!(!entries
+            .iter()
+            .any(|entry| entry.id == "legacy.secure_biometrics_enabled"));
     }
 }

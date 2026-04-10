@@ -80,14 +80,21 @@ jobs:
           TAURI_DISPLAY_VERSION: ${{ steps.ver.outputs.display }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rename EXE
+      - name: Prepare release EXE
         shell: pwsh
         run: |
-          $version = "${{ steps.ver.outputs.display }}"
           $src = Get-ChildItem "src-tauri/target/release/*.exe" |
                  Where-Object { $_.Name -notlike "*build*" } |
                  Select-Object -First 1
-          Copy-Item $src.FullName "VM-Compatibility-Tool-${version}.exe"
+          if (-not $src) {
+            Write-Error "릴리즈 EXE를 찾을 수 없습니다."
+            exit 1
+          }
+          $dest = "vm-compatibility-tool.exe"
+          if (Test-Path $dest) {
+            Remove-Item $dest -Force
+          }
+          Copy-Item $src.FullName $dest
 
       - name: Sign EXE with internal certificate
         if: env.HAS_CODESIGN_SECRETS == 'true'
@@ -98,7 +105,7 @@ jobs:
           WINDOWS_CODESIGN_TIMESTAMP_URL: ${{ secrets.WINDOWS_CODESIGN_TIMESTAMP_URL }}
         run: |
           .\.github\scripts\sign_windows_binary.ps1 `
-            -Files "VM-Compatibility-Tool-${{ steps.ver.outputs.display }}.exe"
+            -Files "vm-compatibility-tool.exe"
 
       - name: Signing summary (enabled)
         if: env.HAS_CODESIGN_SECRETS == 'true'
@@ -142,7 +149,7 @@ jobs:
           name: "${{ steps.ver.outputs.display }}"
           prerelease: false
           make_latest: true
-          files: VM-Compatibility-Tool-*.exe
+          files: vm-compatibility-tool.exe
           body_path: release_body.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

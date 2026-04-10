@@ -306,6 +306,7 @@ fn build_excluded_legacy_registry_item(
     VirtualizationItem::new(entry.label, status, details, recommendation)
         .with_source(VirtualizationSource::Registry)
         .with_disable_group(entry.disable_group, false)
+        .with_optional_action_available(differs_from_target)
         .with_manifest_id(entry.id)
 }
 
@@ -331,7 +332,10 @@ fn check_windows_hello_status(items: &mut Vec<VirtualizationItem>) {
     let recommendation = if can_disable {
         "VBS 비활성화 전 해제 권장: 설정 → 계정 → 회사 또는 학교 액세스 → 연결 끊기".to_string()
     } else {
-        format!("VBS 설정이 재부팅 후 복구될 수 있습니다 — {}", disable_reason)
+        format!(
+            "VBS 설정이 재부팅 후 복구될 수 있습니다 — {}",
+            disable_reason
+        )
     };
 
     items.push(
@@ -349,10 +353,12 @@ fn check_windows_hello_status(items: &mut Vec<VirtualizationItem>) {
 #[cfg(windows)]
 fn is_windows_hello_active() -> bool {
     use std::path::Path;
-    let ngc = Path::new(
-        r"C:\Windows\ServiceProfiles\LocalService\AppData\Local\Microsoft\Ngc",
-    );
-    ngc.exists() && ngc.read_dir().map(|mut d| d.next().is_some()).unwrap_or(false)
+    let ngc = Path::new(r"C:\Windows\ServiceProfiles\LocalService\AppData\Local\Microsoft\Ngc");
+    ngc.exists()
+        && ngc
+            .read_dir()
+            .map(|mut d| d.next().is_some())
+            .unwrap_or(false)
 }
 
 #[cfg(not(windows))]
@@ -362,15 +368,11 @@ fn is_windows_hello_active() -> bool {
 
 #[cfg(windows)]
 fn detect_whfb_type() -> Option<String> {
-    let aad_joined = reg::key_has_subkeys(
-        r"SYSTEM\CurrentControlSet\Control\CloudDomainJoin\JoinInfo",
-    );
-    let policy_enabled = reg::get_dword(
-        r"SOFTWARE\Policies\Microsoft\PassportForWork",
-        "Enabled",
-    )
-    .map(|v| v == 1)
-    .unwrap_or(false);
+    let aad_joined =
+        reg::key_has_subkeys(r"SYSTEM\CurrentControlSet\Control\CloudDomainJoin\JoinInfo");
+    let policy_enabled = reg::get_dword(r"SOFTWARE\Policies\Microsoft\PassportForWork", "Enabled")
+        .map(|v| v == 1)
+        .unwrap_or(false);
     let mdm_enrolled = has_mdm_corporate_enrollment();
 
     if policy_enabled {
@@ -391,12 +393,9 @@ fn detect_whfb_type() -> Option<String> {
 
 #[cfg(windows)]
 fn check_whfb_disableable() -> (bool, String) {
-    let policy_enabled = reg::get_dword(
-        r"SOFTWARE\Policies\Microsoft\PassportForWork",
-        "Enabled",
-    )
-    .map(|v| v == 1)
-    .unwrap_or(false);
+    let policy_enabled = reg::get_dword(r"SOFTWARE\Policies\Microsoft\PassportForWork", "Enabled")
+        .map(|v| v == 1)
+        .unwrap_or(false);
 
     if policy_enabled {
         return (

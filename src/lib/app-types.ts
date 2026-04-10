@@ -10,6 +10,7 @@ export type VirtItem = {
   disable_group: DisableGroup | null;
   source_type: VirtSource;
   action_required: boolean;
+  optional_action_available: boolean;
   manifest_id: string | null;
 };
 export type DisableResult = { task: string; success: boolean; message: string };
@@ -29,4 +30,5 @@ export type DisableOptions = {
   wsl: boolean;
   vbs: boolean;
   core_isolation: boolean;
+  optional_registry_ids: string[];
 };

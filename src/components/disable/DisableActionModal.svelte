@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DisableOptions } from "../../lib/app-types";
+  import type { DisableOptions, VirtItem } from "../../lib/app-types";
 
   type Stage = "warning" | "running" | "complete";
 
@@ -9,11 +9,13 @@
     progressPercent: number;
     currentAction: string;
     disableOptions: DisableOptions;
+    optionalRegistryCandidates: VirtItem[];
     hasErrors: boolean;
     logPath: string | null;
     backupPath: string | null;
     version: string;
     onStart: () => void;
+    onToggleOptionalRegistry: (manifestId: string) => void;
     onCancel: () => void;
     onRebootNow: () => void;
     onDismiss: () => void;
@@ -25,11 +27,13 @@
     progressPercent,
     currentAction,
     disableOptions,
+    optionalRegistryCandidates,
     hasErrors,
     logPath,
     backupPath,
     version,
     onStart,
+    onToggleOptionalRegistry,
     onCancel,
     onRebootNow,
     onDismiss,
@@ -46,6 +50,12 @@
   ]);
 
   const activeTasks = $derived(taskList.filter((t) => t.on));
+  const selectedOptionalTasks = $derived(
+    optionalRegistryCandidates.filter(
+      (item) => item.manifest_id && disableOptions.optional_registry_ids.includes(item.manifest_id)
+    )
+  );
+  const totalSelectedTaskCount = $derived(activeTasks.length + selectedOptionalTasks.length);
 
   function basename(path: string | null): string | null {
     return path?.split(/[\\/]/).pop() ?? null;
@@ -76,7 +86,7 @@
           <section class="summary-card">
             <div class="summary-header">
               <span class="summary-title">조치 예정 항목</span>
-              <span class="summary-count summary-count--danger">{activeTasks.length}개 작업</span>
+              <span class="summary-count summary-count--danger">{totalSelectedTaskCount}개 작업</span>
             </div>
             <div class="task-list">
               {#each activeTasks as task}
@@ -85,11 +95,42 @@
                   <span>{task.label}</span>
                 </div>
               {/each}
+              {#each selectedOptionalTasks as task}
+                <div class="task-item task-item--optional">
+                  <span class="task-dot task-dot--optional">+</span>
+                  <span>{task.category}</span>
+                </div>
+              {/each}
             </div>
           </section>
 
+          {#if optionalRegistryCandidates.length > 0}
+            <section class="summary-card summary-card--optional">
+              <div class="summary-header">
+                <span class="summary-title">추가 선택 가능한 레지스트리 조치</span>
+                <span class="summary-count summary-count--neutral">{optionalRegistryCandidates.length}개 후보</span>
+              </div>
+              <div class="optional-list">
+                {#each optionalRegistryCandidates as item}
+                  {@const manifestId = item.manifest_id ?? ""}
+                  <label class="optional-item">
+                    <input
+                      type="checkbox"
+                      checked={disableOptions.optional_registry_ids.includes(manifestId)}
+                      onchange={() => manifestId && onToggleOptionalRegistry(manifestId)}
+                    />
+                    <span class="optional-copy">
+                      <span class="optional-title">{item.category}</span>
+                      <span class="optional-description">{item.recommendation || item.status}</span>
+                    </span>
+                  </label>
+                {/each}
+              </div>
+            </section>
+          {/if}
+
           <div class="actions">
-            <button class="button button-danger" onclick={onStart}>조치 시작</button>
+            <button class="button button-danger" onclick={onStart} disabled={totalSelectedTaskCount === 0}>조치 시작</button>
             <button class="button button-secondary" onclick={onCancel}>취소</button>
           </div>
 
@@ -284,6 +325,11 @@
     border: 1px solid #e2e8f0;
   }
 
+  .summary-card--optional {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+  }
+
   .summary-header {
     display: flex;
     align-items: center;
@@ -316,11 +362,64 @@
     background: #eef2fb;
   }
 
+  .summary-count--neutral {
+    color: #92400e;
+    background: #fef3c7;
+  }
+
   .summary-message {
     margin: 4px 0 0;
     font-size: 12px;
     color: #5a6a82;
     line-height: 1.55;
+  }
+
+  .task-item--optional {
+    color: #92400e;
+  }
+
+  .task-dot--optional {
+    background: #f59e0b;
+  }
+
+  .optional-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .optional-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 13px;
+    color: #3d5170;
+    cursor: pointer;
+  }
+
+  .optional-item input {
+    margin-top: 2px;
+    width: 16px;
+    height: 16px;
+    accent-color: #d97706;
+    cursor: pointer;
+  }
+
+  .optional-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .optional-title {
+    font-weight: 700;
+    color: #7c2d12;
+  }
+
+  .optional-description {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #92400e;
   }
 
   .task-list {
@@ -396,6 +495,11 @@
   }
 
   .button:active { transform: translateY(1px); }
+  .button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    box-shadow: none;
+  }
 
   .button-primary {
     background: #2f67ea;

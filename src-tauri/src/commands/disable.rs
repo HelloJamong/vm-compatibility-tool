@@ -3,7 +3,9 @@ use crate::models::virtualization::{
     DisableGroup, DisableOptions, DisableOutput, DisableResult, ProgressEvent,
 };
 use crate::services::{
-    log_service, process_service, registry_manifest, registry_service::windows as reg,
+    log_service, process_service,
+    registry_manifest::{self, ResolvedRegistryManifestEntry},
+    registry_service::windows as reg,
 };
 use tauri::{AppHandle, Emitter};
 
@@ -45,20 +47,33 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
     // 레지스트리 수정 전 원본값 백업 수집
     let backup_entries = collect_registry_backup(&opts);
 
-    type TaskFn = fn() -> DisableResult;
-    let mut tasks: Vec<(&str, TaskFn)> = Vec::new();
+    type TaskFn = Box<dyn Fn() -> DisableResult>;
+    let mut tasks: Vec<(String, TaskFn)> = Vec::new();
 
     if opts.hyperv {
-        tasks.push(("Hyper-V 기능 비활성화", disable_hyperv));
+        tasks.push((
+            "Hyper-V 기능 비활성화".to_string(),
+            Box::new(disable_hyperv),
+        ));
     }
     if opts.wsl {
-        tasks.push(("WSL 비활성화", disable_wsl));
+        tasks.push(("WSL 비활성화".to_string(), Box::new(disable_wsl)));
     }
     if opts.vbs {
-        tasks.push(("VBS 레지스트리 비활성화", disable_vbs));
+        tasks.push(("VBS 레지스트리 비활성화".to_string(), Box::new(disable_vbs)));
     }
     if opts.core_isolation {
-        tasks.push(("코어 격리 비활성화", disable_core_isolation));
+        tasks.push((
+            "코어 격리 비활성화".to_string(),
+            Box::new(disable_core_isolation),
+        ));
+    }
+    if !opts.optional_registry_ids.is_empty() {
+        let optional_ids = opts.optional_registry_ids.clone();
+        tasks.push((
+            "선택한 추가 레지스트리 조치".to_string(),
+            Box::new(move || disable_optional_registry_entries(&optional_ids)),
+        ));
     }
 
     if tasks.is_empty() {
@@ -88,7 +103,7 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
             ProgressEvent {
                 step,
                 total,
-                message: label.to_string(),
+                message: label.clone(),
                 success: true,
             },
         );
@@ -105,7 +120,7 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
                     success: false,
                 },
             );
-            log_service::log_error(label, &result.message);
+            log_service::log_error(&label, &result.message);
         }
 
         log_lines.push(String::new());
@@ -126,7 +141,8 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
     log_lines.push("모든 작업 완료".to_string());
 
     // 운영 로그 + 백업 파일 저장
-    let (log_path, backup_path) = match log_service::save_operation_log(&log_lines, &backup_entries) {
+    let (log_path, backup_path) = match log_service::save_operation_log(&log_lines, &backup_entries)
+    {
         Some((lp, bp)) => (Some(lp), Some(bp)),
         None => (None, None),
     };
@@ -151,17 +167,34 @@ fn collect_registry_backup(opts: &DisableOptions) -> Vec<log_service::RegistryBa
         if !enabled {
             continue;
         }
-        for manifest_entry in registry_manifest::disable_write_entries(*group) {
-            let value = reg::get_dword(&manifest_entry.path, manifest_entry.value_name);
-            entries.push(log_service::RegistryBackupEntry {
-                path: manifest_entry.path.clone(),
-                value_name: manifest_entry.value_name.to_string(),
-                value,
-            });
-        }
+        append_registry_backup_entries(
+            &mut entries,
+            registry_manifest::disable_write_entries(*group),
+        );
+    }
+
+    if !opts.optional_registry_ids.is_empty() {
+        append_registry_backup_entries(
+            &mut entries,
+            registry_manifest::selected_optional_entries(&opts.optional_registry_ids),
+        );
     }
 
     entries
+}
+
+fn append_registry_backup_entries(
+    backup_entries: &mut Vec<log_service::RegistryBackupEntry>,
+    manifest_entries: Vec<ResolvedRegistryManifestEntry>,
+) {
+    for manifest_entry in manifest_entries {
+        let value = reg::get_dword(&manifest_entry.path, manifest_entry.value_name);
+        backup_entries.push(log_service::RegistryBackupEntry {
+            path: manifest_entry.path.clone(),
+            value_name: manifest_entry.value_name.to_string(),
+            value,
+        });
+    }
 }
 
 fn disable_hyperv() -> DisableResult {
@@ -220,10 +253,28 @@ fn disable_core_isolation() -> DisableResult {
 }
 
 fn disable_registry_group(group: DisableGroup, task_name: &str) -> DisableResult {
+    apply_registry_entries(task_name, registry_manifest::disable_write_entries(group))
+}
+
+fn disable_optional_registry_entries(ids: &[String]) -> DisableResult {
+    apply_registry_entries(
+        "선택한 추가 레지스트리 조치",
+        registry_manifest::selected_optional_entries(ids),
+    )
+}
+
+fn apply_registry_entries(
+    task_name: &str,
+    manifest_entries: Vec<ResolvedRegistryManifestEntry>,
+) -> DisableResult {
     let mut messages = Vec::new();
     let mut success = true;
 
-    for entry in registry_manifest::disable_write_entries(group) {
+    if manifest_entries.is_empty() {
+        messages.push("선택된 추가 레지스트리 조치 항목이 없습니다.".to_string());
+    }
+
+    for entry in manifest_entries {
         let target_value = entry.target_value.unwrap_or(0);
         match reg::get_dword(&entry.path, entry.value_name) {
             Some(current_value) if current_value != target_value => {

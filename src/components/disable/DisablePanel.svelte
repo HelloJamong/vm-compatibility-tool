@@ -9,6 +9,7 @@
     disableLog: string[];
     disableOptions: DisableOptions;
     selectedTaskCount: number;
+    optionalCandidateCount: number;
     whfbDetected: boolean;
     onRunDisable: () => void;
     onRequestReboot: () => void;
@@ -23,6 +24,7 @@
     disableLog,
     disableOptions,
     selectedTaskCount,
+    optionalCandidateCount,
     whfbDetected,
     onRunDisable,
     onRequestReboot,
@@ -76,6 +78,11 @@
           </div>
         {/each}
       </div>
+      {#if optionalCandidateCount > 0}
+        <p class="mt-2 text-[11px] text-amber-700">
+          추가 레지스트리 조치 {optionalCandidateCount}개는 실행 전 확인 창에서 체크박스로 선택할 수 있습니다.
+        </p>
+      {/if}
     </div>
   {:else}
     <div class="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-700 shrink-0">

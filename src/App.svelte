@@ -61,7 +61,13 @@
   let disableActionHasErrors = $state(false);
   let disableActionLogPath = $state<string | null>(null);
   let disableActionBackupPath = $state<string | null>(null);
-  let disableActionOptions = $state<DisableOptions>({ hyperv: false, wsl: false, vbs: false, core_isolation: false });
+  let disableActionOptions = $state<DisableOptions>({
+    hyperv: false,
+    wsl: false,
+    vbs: false,
+    core_isolation: false,
+    optional_registry_ids: [],
+  });
   let progressValue = $state<number | null>(null);
   let inspectionProgressTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -282,7 +288,7 @@
   function openDisableActionModal() {
     disableActionOptions = virtChecked
       ? computeDisableOptions(virtItems)
-      : { hyperv: true, wsl: true, vbs: true, core_isolation: true };
+      : { hyperv: true, wsl: true, vbs: true, core_isolation: true, optional_registry_ids: [] };
     disableActionStage = "warning";
     disableActionProgress = 0;
     disableActionCurrentAction = "";
@@ -310,7 +316,7 @@
     });
 
     try {
-      const options: DisableOptions | null = virtChecked ? computeDisableOptions(virtItems) : null;
+      const options: DisableOptions | null = virtChecked ? disableActionOptions : null;
       const output = await invoke<DisableOutput>("execute_disable", { options });
       disableActionHasErrors = output.results.some((r) => !r.success);
       disableActionLogPath = output.log_path;
@@ -352,6 +358,17 @@
       wsl: hasActionForGroup(items, "wsl"),
       vbs: hasActionForGroup(items, "vbs"),
       core_isolation: hasActionForGroup(items, "core_isolation"),
+      optional_registry_ids: [],
+    };
+  }
+
+  function toggleOptionalRegistrySelection(manifestId: string) {
+    const isSelected = disableActionOptions.optional_registry_ids.includes(manifestId);
+    disableActionOptions = {
+      ...disableActionOptions,
+      optional_registry_ids: isSelected
+        ? disableActionOptions.optional_registry_ids.filter((id) => id !== manifestId)
+        : [...disableActionOptions.optional_registry_ids, manifestId],
     };
   }
 
@@ -386,7 +403,11 @@
   }
 
   function selectedTaskCount(opts: DisableOptions): number {
-    return [opts.hyperv, opts.wsl, opts.vbs, opts.core_isolation].filter(Boolean).length;
+    return [opts.hyperv, opts.wsl, opts.vbs, opts.core_isolation].filter(Boolean).length + opts.optional_registry_ids.length;
+  }
+
+  function optionalRegistryCandidates(items: VirtItem[]): VirtItem[] {
+    return items.filter((item) => item.optional_action_available && item.manifest_id !== null);
   }
 
   function logLineClass(line: string): string {
@@ -517,11 +538,13 @@
     progressPercent={disableActionProgress}
     currentAction={disableActionCurrentAction}
     disableOptions={disableActionOptions}
+    optionalRegistryCandidates={optionalRegistryCandidates(virtItems)}
     hasErrors={disableActionHasErrors}
     logPath={disableActionLogPath}
     backupPath={disableActionBackupPath}
     {version}
     onStart={startDisableAction}
+    onToggleOptionalRegistry={toggleOptionalRegistrySelection}
     onCancel={closeDisableActionModal}
     onRebootNow={rebootNow}
     onDismiss={closeDisableActionModal}
@@ -587,6 +610,7 @@
           {disableLog}
           disableOptions={computeDisableOptions(virtItems)}
           selectedTaskCount={selectedTaskCount(computeDisableOptions(virtItems))}
+          optionalCandidateCount={optionalRegistryCandidates(virtItems).length}
           whfbDetected={hasWhfbWarning(virtItems)}
           onRunDisable={openDisableActionModal}
           onRequestReboot={requestReboot}

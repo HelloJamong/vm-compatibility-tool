@@ -40,6 +40,7 @@ pub struct VirtualizationItem {
     pub disable_group: Option<DisableGroup>,
     pub source_type: VirtualizationSource,
     pub action_required: bool,
+    pub optional_action_available: bool,
     pub manifest_id: Option<String>,
 }
 
@@ -53,6 +54,7 @@ impl VirtualizationItem {
             disable_group: None,
             source_type: VirtualizationSource::Unknown,
             action_required: false,
+            optional_action_available: false,
             manifest_id: None,
         }
     }
@@ -69,6 +71,11 @@ impl VirtualizationItem {
 
     pub fn with_source(mut self, source_type: VirtualizationSource) -> Self {
         self.source_type = source_type;
+        self
+    }
+
+    pub fn with_optional_action_available(mut self, optional_action_available: bool) -> Self {
+        self.optional_action_available = optional_action_available;
         self
     }
 
@@ -113,6 +120,7 @@ pub struct DisableOptions {
     pub wsl: bool,
     pub vbs: bool,
     pub core_isolation: bool,
+    pub optional_registry_ids: Vec<String>,
 }
 
 impl DisableOptions {
@@ -122,6 +130,7 @@ impl DisableOptions {
             wsl: true,
             vbs: true,
             core_isolation: true,
+            optional_registry_ids: Vec::new(),
         }
     }
 }
