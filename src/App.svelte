@@ -13,7 +13,7 @@
   import type {
     DisableGroup,
     DisableOptions,
-    DisableResult,
+    DisableOutput,
     Panel,
     ProgressEvent,
     SystemInfoItem,
@@ -160,8 +160,8 @@
 
     try {
       const options: DisableOptions | null = virtChecked ? computeDisableOptions(virtItems) : null;
-      const results = await invoke<DisableResult[]>("execute_disable", { options });
-      for (const result of results) {
+      const output = await invoke<DisableOutput>("execute_disable", { options });
+      for (const result of output.results) {
         disableLog = [
           ...disableLog,
           "",
@@ -176,7 +176,15 @@
         "✅ 모든 작업이 완료되었습니다.",
         "변경 사항을 적용하려면 재부팅이 필요합니다.",
       ];
-      status = "비활성화 완료 — 재부팅 필요";
+      if (output.log_path) {
+        disableLog = [...disableLog, `📄 로그: ${output.log_path}`];
+      }
+      if (output.backup_path) {
+        disableLog = [...disableLog, `💾 레지스트리 백업: ${output.backup_path}`];
+      }
+      status = output.log_path
+        ? `비활성화 완료 — 로그 저장됨`
+        : "비활성화 완료 — 재부팅 필요";
       disableComplete = true;
     } catch (e) {
       disableLog = [...disableLog, `❌ 오류: ${e}`];
