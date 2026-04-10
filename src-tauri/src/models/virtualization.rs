@@ -86,6 +86,14 @@ pub struct DisableResult {
     pub message: String,
 }
 
+/// 비활성화 실행 최종 출력 (결과 + 저장된 파일 경로)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DisableOutput {
+    pub results: Vec<DisableResult>,
+    pub log_path: Option<String>,
+    pub backup_path: Option<String>,
+}
+
 /// 실시간 진행 이벤트 (Tauri emit)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgressEvent {

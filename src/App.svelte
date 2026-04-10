@@ -265,10 +265,6 @@
     return "text-green-300";
   }
 
-  function isCategoryStart(items: SystemInfoItem[], index: number): boolean {
-    return index === 0 || items[index].category !== items[index - 1].category;
-  }
-
   const rebootBullets = [
     "실행 중인 작업은 모두 저장하세요.",
     "변경 사항 적용을 위해 시스템 재시작이 필요합니다.",
