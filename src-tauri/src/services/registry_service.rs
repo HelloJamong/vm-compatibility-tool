@@ -64,6 +64,22 @@ pub mod windows {
         }
     }
 
+    /// 레지스트리 키가 존재하고 서브키를 하나 이상 가지면 true
+    pub fn key_has_subkeys(path: &str) -> bool {
+        RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey(path)
+            .map(|key| key.enum_keys().any(|_| true))
+            .unwrap_or(false)
+    }
+
+    /// 레지스트리 키의 서브키 이름 목록 반환
+    pub fn list_subkeys(path: &str) -> Vec<String> {
+        RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey(path)
+            .map(|key| key.enum_keys().filter_map(|k| k.ok()).collect())
+            .unwrap_or_default()
+    }
+
     /// 레지스트리 DWORD 값 쓰기 (비활성화 작업용)
     pub fn set_dword(path: &str, name: &str, value: u32) -> anyhow::Result<()> {
         let (key, _) = RegKey::predef(HKEY_LOCAL_MACHINE)
@@ -102,6 +118,12 @@ pub mod windows {
 
     pub fn get_dword(_path: &str, _name: &str) -> Option<u32> {
         None
+    }
+    pub fn key_has_subkeys(_path: &str) -> bool {
+        false
+    }
+    pub fn list_subkeys(_path: &str) -> Vec<String> {
+        vec![]
     }
     pub fn set_dword(_path: &str, _name: &str, _value: u32) -> Result<()> {
         Err(anyhow::anyhow!("Windows 전용 기능입니다"))

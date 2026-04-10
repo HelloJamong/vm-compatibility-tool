@@ -2,6 +2,9 @@
   import StatusBadge from "../common/StatusBadge.svelte";
 
   type Props = {
+    systemLoading: boolean;
+    systemLoaded: boolean;
+    virtLoading: boolean;
     virtChecked: boolean;
     actionGroupCount: number;
     onLoadSystemInfo: () => void;
@@ -10,6 +13,9 @@
   };
 
   let {
+    systemLoading,
+    systemLoaded,
+    virtLoading,
     virtChecked,
     actionGroupCount,
     onLoadSystemInfo,
@@ -29,7 +35,14 @@
       onclick={onLoadSystemInfo}
       class="w-full px-4 py-3 text-left bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-colors shadow-sm"
     >
-      <div class="text-sm font-bold">🖥️ 시스템 사양 체크</div>
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-sm font-bold">🖥️ 시스템 사양 체크</span>
+        {#if systemLoading}
+          <StatusBadge label="점검 중..." tone="neutral" />
+        {:else if systemLoaded}
+          <StatusBadge label="완료" tone="success" />
+        {/if}
+      </div>
       <div class="mt-1 text-[11px] text-blue-100">OS / CPU / 메모리 / 디스크 / 이벤트 로그 요약</div>
     </button>
 
@@ -39,7 +52,9 @@
     >
       <div class="flex items-center justify-between gap-2">
         <span class="text-sm font-bold">🔍 가상화 설정 점검</span>
-        {#if virtChecked}
+        {#if virtLoading}
+          <StatusBadge label="점검 중..." tone="neutral" />
+        {:else if virtChecked}
           <StatusBadge
             label={actionGroupCount > 0 ? `${actionGroupCount}개 조치 필요` : "정상"}
             tone={actionGroupCount > 0 ? "danger" : "success"}

@@ -5,12 +5,18 @@
 
 use crate::models::system_info::SystemInfoItem;
 use crate::services::{event_log_service, registry_service::windows as reg};
+use tauri::AppHandle;
 
 #[tauri::command]
 pub fn get_app_version() -> String {
     option_env!("TAURI_DISPLAY_VERSION")
         .unwrap_or("dev")
         .to_string()
+}
+
+#[tauri::command]
+pub fn exit_app(app: AppHandle) {
+    app.exit(0);
 }
 
 #[tauri::command]

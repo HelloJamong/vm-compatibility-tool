@@ -16,6 +16,8 @@ Manual verification checklist for the Tauri-based VM Compatibility Tool after th
 - [ ] Confirm the app opens without a console window in release build.
 - [ ] Confirm the app title and icon appear correctly.
 - [ ] Confirm launching without admin shows the required warning and exits.
+- [ ] Downloaded release EXE shows the expected SmartScreen behavior for current internal distribution policy.
+- [ ] If SmartScreen appears, `추가 정보 → 실행` guidance in docs/release note matches the actual user flow.
 
 ## Menu / Navigation
 - [ ] Main menu renders all three primary actions.
@@ -85,6 +87,7 @@ Prepare a machine where some relevant values exist and are active, and others ar
 
 ## Notes to Record During QA
 - Windows version / build
+- Whether SmartScreen appeared and what exact text/buttons were shown
 - Which security features were initially enabled
 - Which registry values were present vs missing
 - Whether excluded legacy rows were useful/noisy

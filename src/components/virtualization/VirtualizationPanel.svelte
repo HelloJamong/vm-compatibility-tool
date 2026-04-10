@@ -28,6 +28,10 @@
     onExport,
     onShowDisable,
   }: Props = $props();
+
+  let actionItems = $derived(
+    virtItems.filter(item => item.action_required || item.manifest_id === "whfb_check")
+  );
 </script>
 
 <div class="flex flex-col gap-2.5 h-full">
@@ -64,42 +68,45 @@
       </div>
     {/if}
 
-    <div class="flex-1 overflow-auto rounded-xl border border-gray-200 shadow-sm bg-white">
-      <table class="w-full table-fixed text-sm border-collapse bg-white">
-        <thead class="bg-gray-100 sticky top-0 z-10">
-          <tr>
-            <th class="text-left px-3 py-2 border-b w-52 font-semibold text-gray-700">항목</th>
-            <th class="text-left px-3 py-2 border-b w-32 font-semibold text-gray-700">상태</th>
-            <th class="text-left px-3 py-2 border-b font-semibold text-gray-700">상세 정보</th>
-            <th class="text-left px-3 py-2 border-b w-52 font-semibold text-gray-700">권장사항</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each virtItems as item, i}
-            {@const isReference = item.status.includes("(참고)")}
-            <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isReference ? 'hover:bg-slate-50' : item.recommendation ? 'hover:bg-red-50' : 'hover:bg-green-50'} transition-colors align-top">
-              <td class="px-3 py-2 border-b font-medium text-gray-800 text-xs align-top break-words">{item.category}</td>
-              <td class="px-3 py-2 border-b align-top">
-                <StatusBadge
-                  label={item.status}
-                  tone={isReference ? "neutral" : item.status.includes("활성화됨") || item.status.includes("설치됨 (활성)") ? "danger" : "success"}
-                  className="font-medium"
-                />
-              </td>
-              <td class="px-3 py-2 border-b text-gray-500 text-xs align-top break-words">{item.details}</td>
-              <td class="px-3 py-2 border-b text-xs align-top break-words">
-                {#if item.recommendation}
-                  <span class={isReference ? "text-slate-600" : "text-amber-700"}>
-                    {item.recommendation}
-                  </span>
-                {:else}
-                  <span class="text-green-600">정상</span>
-                {/if}
-              </td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
+    <div class="flex-1 overflow-auto">
+      {#if actionItems.length === 0}
+        <div class="h-full flex items-center justify-center rounded-xl border border-green-200 bg-green-50">
+          <p class="text-sm text-green-700 font-semibold">✅ 모든 항목이 VM 호환 상태입니다. 조치가 필요하지 않습니다.</p>
+        </div>
+      {:else}
+        <div class="rounded-xl border border-gray-200 shadow-sm bg-white overflow-hidden">
+          <table class="w-full table-fixed text-sm border-collapse bg-white">
+            <thead class="bg-gray-100 sticky top-0 z-10">
+              <tr>
+                <th class="text-left px-3 py-2 border-b w-44 font-semibold text-gray-700">항목</th>
+                <th class="text-left px-3 py-2 border-b w-32 font-semibold text-gray-700">상태</th>
+                <th class="text-left px-3 py-2 border-b font-semibold text-gray-700">권장사항</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each actionItems as item, i}
+                {@const isWhfbCheck = item.manifest_id === "whfb_check"}
+                <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isWhfbCheck ? 'hover:bg-amber-50' : 'hover:bg-red-50'} transition-colors align-top">
+                  <td class="px-3 py-2 border-b font-medium text-gray-800 text-xs align-top break-words">{item.category}</td>
+                  <td class="px-3 py-2 border-b align-top">
+                    <StatusBadge
+                      label={item.status}
+                      tone={isWhfbCheck ? "info" : "danger"}
+                      className="font-medium"
+                    />
+                  </td>
+                  <td class="px-3 py-2 border-b text-xs align-top break-words">
+                    {#if item.recommendation}
+                      <span class={isWhfbCheck ? "text-blue-700" : "text-amber-700"}>{item.recommendation}</span>
+                    {/if}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+        <p class="mt-2 text-[11px] text-gray-400 text-right">전체 점검 결과는 CSV 내보내기로 확인하세요.</p>
+      {/if}
     </div>
 
     {#if virtChecked && virtItems.length > 0}

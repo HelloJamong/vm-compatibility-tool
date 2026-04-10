@@ -17,6 +17,7 @@ omx/
 # Editor / OS noise
 .vs/
 .vscode/
+.claude/settings.local.json
 .history/
 .DS_Store
 Thumbs.db
@@ -25,3 +26,6 @@ Thumbs.db
 *.log
 *.tmp
 *.pid
+
+# Local design references
+design_sample.html

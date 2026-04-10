@@ -13,6 +13,11 @@ export type VirtItem = {
   manifest_id: string | null;
 };
 export type DisableResult = { task: string; success: boolean; message: string };
+export type DisableOutput = {
+  results: DisableResult[];
+  log_path: string | null;
+  backup_path: string | null;
+};
 export type ProgressEvent = {
   step: number;
   total: number;

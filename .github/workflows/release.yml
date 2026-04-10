@@ -10,6 +10,8 @@ jobs:
   build:
     name: Build Official Release
     runs-on: windows-latest
+    env:
+      HAS_CODESIGN_SECRETS: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 != '' && secrets.WINDOWS_CODESIGN_PFX_PASSWORD != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -87,6 +89,34 @@ jobs:
                  Select-Object -First 1
           Copy-Item $src.FullName "VM-Compatibility-Tool-${version}.exe"
 
+      - name: Sign EXE with internal certificate
+        if: env.HAS_CODESIGN_SECRETS == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
+          WINDOWS_CODESIGN_PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+          WINDOWS_CODESIGN_TIMESTAMP_URL: ${{ secrets.WINDOWS_CODESIGN_TIMESTAMP_URL }}
+        run: |
+          .\.github\scripts\sign_windows_binary.ps1 `
+            -Files "VM-Compatibility-Tool-${{ steps.ver.outputs.display }}.exe"
+
+      - name: Signing summary (enabled)
+        if: env.HAS_CODESIGN_SECRETS == 'true'
+        shell: pwsh
+        run: |
+          echo "## 🔏 Code signing" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Internal/self-signed PFX signing: enabled" >> $env:GITHUB_STEP_SUMMARY
+          echo "- End-user PCs must trust the internal root/intermediate certificate to avoid unknown publisher warnings." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Signing summary (skipped)
+        if: env.HAS_CODESIGN_SECRETS != 'true'
+        shell: pwsh
+        run: |
+          echo "## ⚠️ Code signing skipped" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Set WINDOWS_CODESIGN_PFX_BASE64 and WINDOWS_CODESIGN_PFX_PASSWORD to enable internal signing." >> $env:GITHUB_STEP_SUMMARY
+
       - name: Create official GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -102,6 +132,9 @@ jobs:
 
             ---
             📦 **사용 방법**: EXE 파일을 다운로드하여 관리자 권한으로 실행하세요.
+            
+            > 실행 시 Windows SmartScreen 경고가 표시될 수 있습니다.
+            > 내부 배포본이 맞다면 `추가 정보` → `실행` 순서로 진행하세요.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

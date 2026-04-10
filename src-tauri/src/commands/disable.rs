@@ -1,5 +1,7 @@
 /// 비활성화 실행 커맨드
-use crate::models::virtualization::{DisableGroup, DisableOptions, DisableResult, ProgressEvent};
+use crate::models::virtualization::{
+    DisableGroup, DisableOptions, DisableOutput, DisableResult, ProgressEvent,
+};
 use crate::services::{
     log_service, process_service, registry_manifest, registry_service::windows as reg,
 };
@@ -28,7 +30,7 @@ const WSL_FEATURES: &[&str] = &[
 pub async fn execute_disable(
     app: AppHandle,
     options: Option<DisableOptions>,
-) -> Result<Vec<DisableResult>, String> {
+) -> Result<DisableOutput, String> {
     tokio::task::spawn_blocking(move || {
         run_disable_tasks(&app, options.unwrap_or_else(DisableOptions::all))
     })
@@ -37,8 +39,11 @@ pub async fn execute_disable(
     .map_err(|e| e.to_string())
 }
 
-fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Vec<DisableResult>> {
+fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<DisableOutput> {
     log_service::init();
+
+    // 레지스트리 수정 전 원본값 백업 수집
+    let backup_entries = collect_registry_backup(&opts);
 
     type TaskFn = fn() -> DisableResult;
     let mut tasks: Vec<(&str, TaskFn)> = Vec::new();
@@ -57,15 +62,23 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Ve
     }
 
     if tasks.is_empty() {
-        return Ok(vec![DisableResult {
+        let result = DisableResult {
             task: "점검 결과".to_string(),
             success: true,
             message: "비활성화가 필요한 항목이 없습니다.".to_string(),
-        }]);
+        };
+        return Ok(DisableOutput {
+            results: vec![result],
+            log_path: None,
+            backup_path: None,
+        });
     }
 
     let total = tasks.len() as u32;
     let mut results = Vec::new();
+    let mut log_lines: Vec<String> = Vec::new();
+
+    log_lines.push("▶ 비활성화 작업 시작".to_string());
 
     for (i, (label, task_fn)) in tasks.into_iter().enumerate() {
         let step = i as u32 + 1;
@@ -95,10 +108,60 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Ve
             log_service::log_error(label, &result.message);
         }
 
+        log_lines.push(String::new());
+        log_lines.push(format!(
+            "{} {}",
+            if result.success { "✅" } else { "⚠️" },
+            result.task
+        ));
+        for line in result.message.lines() {
+            log_lines.push(format!("  {line}"));
+        }
+
         results.push(result);
     }
 
-    Ok(results)
+    log_lines.push(String::new());
+    log_lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".to_string());
+    log_lines.push("모든 작업 완료".to_string());
+
+    // 운영 로그 + 백업 파일 저장
+    let (log_path, backup_path) = match log_service::save_operation_log(&log_lines, &backup_entries) {
+        Some((lp, bp)) => (Some(lp), Some(bp)),
+        None => (None, None),
+    };
+
+    Ok(DisableOutput {
+        results,
+        log_path,
+        backup_path,
+    })
+}
+
+/// 레지스트리 수정 대상 항목의 현재 값을 수정 전에 수집
+fn collect_registry_backup(opts: &DisableOptions) -> Vec<log_service::RegistryBackupEntry> {
+    let mut entries = Vec::new();
+
+    let groups: &[(bool, DisableGroup)] = &[
+        (opts.vbs, DisableGroup::Vbs),
+        (opts.core_isolation, DisableGroup::CoreIsolation),
+    ];
+
+    for (enabled, group) in groups {
+        if !enabled {
+            continue;
+        }
+        for manifest_entry in registry_manifest::disable_write_entries(*group) {
+            let value = reg::get_dword(&manifest_entry.path, manifest_entry.value_name);
+            entries.push(log_service::RegistryBackupEntry {
+                path: manifest_entry.path.clone(),
+                value_name: manifest_entry.value_name.to_string(),
+                value,
+            });
+        }
+    }
+
+    entries
 }
 
 fn disable_hyperv() -> DisableResult {
