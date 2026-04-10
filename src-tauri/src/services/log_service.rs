@@ -13,7 +13,7 @@ fn error_log_dir() -> PathBuf {
 
 pub fn operation_log_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let dir = exe.parent()?.join("logs");
+    let dir = exe.parent()?.join("vmc_logs");
     Some(dir)
 }
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [beta-v26.04.01.0021] - 2026-04-10
+
+### Changed
+- 앱 창 최대화 버튼 비활성화
+  - `maximizable: false` 적용으로 창 크기를 늘릴 수 없도록 제한
+- 시작 점검 화면 닫기 버튼과 Footer 사이 여백 추가
+  - `.actions`에 `margin-bottom: 24px` 적용
+- 자동 저장 로그 폴더명 변경: `logs` → `vmc_logs`
+  - 다른 프로그램 생성 폴더와 구분 가능하도록 변경
+- 자동 저장 CSV 파일명 규칙 변경
+  - 시스템 정보: `YYMMDD_HHMMSS_{HostName}-SystemInfo.csv`
+  - 가상화 점검 결과: `YYMMDD_HHMMSS_{HostName}-reg.csv`
+
+---
+
 ## [beta-v26.04.01.0020] - 2026-04-10
 
 ### Fixed

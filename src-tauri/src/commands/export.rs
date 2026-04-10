@@ -84,14 +84,15 @@ fn build_auto_csv_path(data_type: &str) -> anyhow::Result<PathBuf> {
     let dir = log_service::operation_log_dir().ok_or_else(|| anyhow::anyhow!("저장 경로를 찾을 수 없습니다"))?;
     fs::create_dir_all(&dir)?;
 
-    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let suffix = match data_type {
-        "system" => "system_info",
-        "virtualization" => "inspection_result",
-        other => other,
+    let ts = chrono::Local::now().format("%y%m%d_%H%M%S");
+    let hostname = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "UNKNOWN".to_string());
+    let filename = match data_type {
+        "system" => format!("{ts}_{hostname}-SystemInfo.csv"),
+        "virtualization" => format!("{ts}_{hostname}-reg.csv"),
+        other => format!("{ts}_{hostname}-{other}.csv"),
     };
 
-    Ok(dir.join(format!("{ts}_{suffix}.csv")))
+    Ok(dir.join(filename))
 }
 
 fn write_csv(

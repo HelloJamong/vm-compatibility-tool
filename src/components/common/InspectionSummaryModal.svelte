@@ -304,6 +304,7 @@
     width: 100%;
     max-width: none;
     margin-top: 36px;
+    margin-bottom: 24px;
     display: flex;
     flex-direction: column;
     gap: 14px;
