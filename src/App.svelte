@@ -446,6 +446,7 @@
     ].filter((value): value is string => Boolean(value))}
     saveError={inspectionResultSaveError}
     {version}
+    whfbDetected={hasWhfbWarning(virtItems)}
     onStartAction={startInspectionActions}
     onClose={closeInspectionModal}
   />
