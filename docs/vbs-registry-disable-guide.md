@@ -47,7 +47,7 @@
 | `Scenarios\\SystemGuard\\Enabled` | System Guard 보호 기능 | **중간~높음** — 부팅 / 런타임 무결성 보호가 감소할 수 있습니다. |
 | `Scenarios\\SecureBiometrics\\Enabled` | 보안 생체 인증 보호 | **중간** — Windows Hello / 생체 인증 보안 경로에 영향이 있을 수 있습니다. |
 | `Lsa\\LsaCfgFlagsDefault` | LSA 기본 보호 기본값 | **중간** — 기본 보안 구성 해석이 달라질 수 있습니다. |
-| `Policies\\...\\ConfigureSystemGuardLaunch` | System Guard 정책 시작 설정 | **중간~높음** — 조직 정책 기반 보호가 약화될 수 있습니다. |
+| `Policies\\...\\ConfigureSystemGuardLaunch` | System Guard 정책 시작 추가설정 | **중간~높음** — 조직 정책 기반 보호가 약화될 수 있습니다. |
 
 ---
 

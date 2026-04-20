@@ -218,6 +218,13 @@ fn disable_hyperv() -> DisableResult {
         all_success = false;
     }
 
+    let vsm = process_service::disable_vsm_launch();
+    if vsm.success {
+        messages.push("✓ vsmlaunchtype off".to_string());
+    } else {
+        messages.push(format!("- vsmlaunchtype: 건너뜀 ({})", vsm.stderr.trim()));
+    }
+
     DisableResult {
         task: "Hyper-V 비활성화".to_string(),
         success: all_success,

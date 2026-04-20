@@ -30,7 +30,7 @@
   }: Props = $props();
 
   let actionItems = $derived(
-    virtItems.filter(item => item.action_required || item.manifest_id === "whfb_check")
+    virtItems.filter(item => item.action_required || item.manifest_id === "whfb_check" || item.manifest_id === "org_control_check")
   );
 </script>
 
@@ -86,18 +86,19 @@
             <tbody>
               {#each actionItems as item, i}
                 {@const isWhfbCheck = item.manifest_id === "whfb_check"}
-                <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isWhfbCheck ? 'hover:bg-amber-50' : 'hover:bg-red-50'} transition-colors align-top">
+                {@const isOrgCheck = item.manifest_id === "org_control_check"}
+                <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isWhfbCheck || isOrgCheck ? 'hover:bg-blue-50' : 'hover:bg-red-50'} transition-colors align-top">
                   <td class="px-3 py-2 border-b font-medium text-gray-800 text-xs align-top break-words">{item.category}</td>
                   <td class="px-3 py-2 border-b align-top">
                     <StatusBadge
                       label={item.status}
-                      tone={isWhfbCheck ? "info" : "danger"}
+                      tone={isWhfbCheck || isOrgCheck ? "info" : "danger"}
                       className="font-medium"
                     />
                   </td>
                   <td class="px-3 py-2 border-b text-xs align-top break-words">
                     {#if item.recommendation}
-                      <span class={isWhfbCheck ? "text-blue-700" : "text-amber-700"}>{item.recommendation}</span>
+                      <span class={isWhfbCheck || isOrgCheck ? "text-blue-700" : "text-amber-700"}>{item.recommendation}</span>
                     {/if}
                   </td>
                 </tr>

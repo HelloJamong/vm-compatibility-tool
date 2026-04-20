@@ -94,6 +94,40 @@ pub fn get_hypervisor_launch_type() -> String {
     }
 }
 
+/// bcdedit으로 vsmlaunchtype 비활성화
+pub fn disable_vsm_launch() -> ProcessResult {
+    Command::new("bcdedit.exe")
+        .args(["/set", "vsmlaunchtype", "off"])
+        .creation_flags_no_window()
+        .output()
+        .map(ProcessResult::from_output)
+        .unwrap_or_else(|e| ProcessResult::error(&e.to_string()))
+}
+
+/// bcdedit으로 현재 vsmlaunchtype 상태 확인 — BCD에 없으면 "미설정" 반환
+pub fn get_vsm_launch_type() -> String {
+    let result = Command::new("bcdedit.exe")
+        .args(["/enum", "{current}"])
+        .creation_flags_no_window()
+        .output();
+
+    match result {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            for line in stdout.lines() {
+                if line.to_lowercase().contains("vsmlaunchtype") {
+                    let parts: Vec<&str> = line.splitn(2, ' ').collect();
+                    if parts.len() == 2 {
+                        return parts[1].trim().to_string();
+                    }
+                }
+            }
+            "미설정".to_string()
+        }
+        Err(e) => format!("오류: {}", e),
+    }
+}
+
 /// PowerShell 스크립트 실행
 pub fn run_powershell(script: &str) -> ProcessResult {
     let wrapped_script = wrap_powershell_script(script);

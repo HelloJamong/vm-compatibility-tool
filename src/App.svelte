@@ -389,17 +389,21 @@
   }
 
   function unknownItemCount(items: VirtItem[]): number {
-    return items.filter((item) => item.status.includes("확인 불가") && item.manifest_id !== "whfb_check").length;
+    return items.filter((item) => item.status.includes("확인 불가") && item.manifest_id !== "whfb_check" && item.manifest_id !== "org_control_check").length;
   }
 
   function healthyItemCount(items: VirtItem[]): number {
     return items.filter(
-      (item) => !item.action_required && !item.status.includes("확인 불가") && item.manifest_id !== "whfb_check"
+      (item) => !item.action_required && !item.status.includes("확인 불가") && item.manifest_id !== "whfb_check" && item.manifest_id !== "org_control_check"
     ).length;
   }
 
   function hasWhfbWarning(items: VirtItem[]): boolean {
     return items.some((item) => item.manifest_id === "whfb_check");
+  }
+
+  function hasOrgWarning(items: VirtItem[]): boolean {
+    return items.some((item) => item.manifest_id === "org_control_check");
   }
 
   function selectedTaskCount(opts: DisableOptions): number {
@@ -612,6 +616,7 @@
           selectedTaskCount={selectedTaskCount(computeDisableOptions(virtItems))}
           optionalCandidateCount={optionalRegistryCandidates(virtItems).length}
           whfbDetected={hasWhfbWarning(virtItems)}
+          orgWarningDetected={hasOrgWarning(virtItems)}
           onRunDisable={openDisableActionModal}
           onRequestReboot={requestReboot}
           onLoadVirtStatus={loadVirtStatus}

@@ -11,6 +11,7 @@
     selectedTaskCount: number;
     optionalCandidateCount: number;
     whfbDetected: boolean;
+    orgWarningDetected: boolean;
     onRunDisable: () => void;
     onRequestReboot: () => void;
     onLoadVirtStatus: () => void;
@@ -26,6 +27,7 @@
     selectedTaskCount,
     optionalCandidateCount,
     whfbDetected,
+    orgWarningDetected,
     onRunDisable,
     onRequestReboot,
     onLoadVirtStatus,
@@ -40,6 +42,13 @@
     <div class="bg-amber-50 border border-amber-300 rounded-xl p-3 text-sm shrink-0">
       <p class="font-bold text-amber-800 mb-1">⚠️ Windows Hello for Business 감지됨</p>
       <p class="text-xs text-amber-700">VBS 레지스트리는 재부팅 후 복구될 수 있습니다. 가상화 점검 결과의 <span class="font-semibold">Windows Hello</span> 항목을 먼저 확인하세요.</p>
+    </div>
+  {/if}
+
+  {#if orgWarningDetected}
+    <div class="bg-blue-50 border border-blue-300 rounded-xl p-3 text-sm shrink-0">
+      <p class="font-bold text-blue-800 mb-1">ℹ️ 조직 관리 장치 감지됨</p>
+      <p class="text-xs text-blue-700">이 장치는 Azure AD 또는 MDM으로 관리됩니다. 비활성화 후 재부팅 시 VBS 설정이 정책으로 재적용될 수 있습니다. IT 관리자에게 확인하세요.</p>
     </div>
   {/if}
 

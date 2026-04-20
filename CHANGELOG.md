@@ -1,5 +1,36 @@
 # Changelog
 
+## [Release-v26.04.04] - 2026-04-20
+
+### 주요 변경사항 요약
+
+#### 레지스트리 매니페스트 확장
+- `RunAsPPL`, `RunAsPPLBoot` (LSA 보호 프로세스) 항목을 `InspectOnly`로 추가
+  - `LsaCfgFlags`와 별개의 LSA 보호 플래그 — 직접 비활성화는 위험도가 높아 점검 전용으로 등록
+- `EnableSecureLaunch` (Secure Launch / DRTM) 항목을 `ExcludedLegacy`로 추가
+  - VM 호환성에 영향을 줄 수 있는 Secure Launch 설정을 선택적 조치 후보로 등록
+
+#### vsmlaunchtype 비활성화 지원
+- bcdedit `vsmlaunchtype off` 추가 — VSM(Virtual Secure Mode) 시작 유형을 Hyper-V 비활성화 흐름에서 함께 처리
+- 가상화 점검 결과에 `VSM 시작 유형 (vsmlaunchtype)` 항목 추가 — BCD 값이 활성 상태이면 `Hyperv` 그룹 조치 필요로 표시
+- Hyper-V 비활성화 로그에 `✓ vsmlaunchtype off` 결과 기록
+
+#### 조직 관리 장치 감지 (Azure AD / MDM)
+- 가상화 점검 중 Azure AD 조인 또는 MDM 기업 등록을 감지해 `org_control_check` 항목으로 표시
+- 가상화 점검 결과 표에 `조직 관리 장치` 행 추가 — 연결 유형(AAD 조인 / MDM 등록 / 둘 다)을 파란 계열 배지로 표시
+- 비활성화 패널에 조직 관리 감지 시 정보 배너 추가
+  - "비활성화 후 재부팅 시 VBS 설정이 정책으로 재적용될 수 있습니다 — IT 관리자 확인 권장"
+  - 조치 시작 버튼을 막지 않는 정보 전용 경고
+
+#### QA 체크리스트 최신화
+- 현재 소스 기준으로 `docs/windows-manual-qa-checklist.md` 전면 검토 및 갱신
+  - 없어진 항목 제거 (시스템 정보 패널 상세 표시, 메뉴 배지 수동 갱신 등)
+  - 자동 점검/자동 저장 흐름에 맞게 항목 재작성
+  - `hypervisorlaunchtype off` 로그 확인 항목 추가
+  - 창 크기 · 최대화 불가 조건 명시
+
+---
+
 ## [Release-v26.04.03] - 2026-04-10
 
 ### 주요 변경사항 요약

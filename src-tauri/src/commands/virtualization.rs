@@ -23,8 +23,10 @@ fn collect_virtualization_status() -> anyhow::Result<Vec<VirtualizationItem>> {
     check_hyperv_status(&mut items);
     check_wsl_status(&mut items);
     check_hypervisor_launch(&mut items);
+    check_vsm_launch(&mut items);
     check_registry_manifest_status(&mut items);
     check_windows_hello_status(&mut items);
+    check_organization_control(&mut items);
 
     Ok(items)
 }
@@ -181,6 +183,29 @@ fn check_hypervisor_launch(items: &mut Vec<VirtualizationItem>) {
             &format!("bcdedit hypervisorlaunchtype: {launch_type}"),
             if is_active {
                 "비활성화를 위해 bcdedit /set hypervisorlaunchtype off 실행 필요"
+            } else {
+                ""
+            },
+        )
+        .with_source(VirtualizationSource::Bcd)
+        .with_disable_group(DisableGroup::Hyperv, is_active),
+    );
+}
+
+// ── VSM 시작 유형 (bcdedit vsmlaunchtype) ──────────────────────────────────
+
+fn check_vsm_launch(items: &mut Vec<VirtualizationItem>) {
+    let vsm_type = process_service::get_vsm_launch_type();
+    let is_active = !matches!(vsm_type.to_lowercase().as_str(), "off" | "미설정" | "확인 불가")
+        && !vsm_type.starts_with("오류");
+
+    items.push(
+        VirtualizationItem::new(
+            "VSM 시작 유형 (vsmlaunchtype)",
+            &vsm_type,
+            &format!("bcdedit vsmlaunchtype: {vsm_type}"),
+            if is_active {
+                "비활성화를 위해 bcdedit /set vsmlaunchtype off 실행 필요"
             } else {
                 ""
             },
@@ -433,4 +458,46 @@ fn has_mdm_corporate_enrollment() -> bool {
 #[cfg(not(windows))]
 fn has_mdm_corporate_enrollment() -> bool {
     false
+}
+
+// ── 조직 관리 장치 감지 (AAD / MDM) ──────────────────────────────────────
+
+fn check_organization_control(items: &mut Vec<VirtualizationItem>) {
+    let (is_org_managed, org_type) = detect_organization_control();
+    if !is_org_managed {
+        return;
+    }
+
+    items.push(
+        VirtualizationItem::new(
+            "조직 관리 장치",
+            &format!("감지됨 — {}", org_type),
+            &format!("조직 연결 유형: {}", org_type),
+            "비활성화 후 재부팅 시 VBS 설정이 정책으로 재적용될 수 있습니다 — IT 관리자 확인 권장",
+        )
+        .with_source(VirtualizationSource::Registry)
+        .with_manifest_id("org_control_check"),
+    );
+}
+
+#[cfg(windows)]
+fn detect_organization_control() -> (bool, String) {
+    let aad_joined =
+        reg::key_has_subkeys(r"SYSTEM\CurrentControlSet\Control\CloudDomainJoin\JoinInfo");
+    let mdm_enrolled = has_mdm_corporate_enrollment();
+
+    if aad_joined && mdm_enrolled {
+        (true, "Azure AD 조인 + MDM 등록".to_string())
+    } else if aad_joined {
+        (true, "Azure AD 조인".to_string())
+    } else if mdm_enrolled {
+        (true, "MDM 등록".to_string())
+    } else {
+        (false, String::new())
+    }
+}
+
+#[cfg(not(windows))]
+fn detect_organization_control() -> (bool, String) {
+    (false, String::new())
 }
