@@ -188,14 +188,22 @@ fn collect_disk_info(items: &mut Vec<SystemInfoItem>) {
             }
         }
 
-        // MSFT_PhysicalDisk 인덱스 대응 → 없으면 모델명 키워드 폴백
-        let disk_type = physical_disks
-            .get(i)
-            .and_then(|pd| {
-                pd.media_type
-                    .map(|mt| disk_service::media_type_to_disk_type(mt, pd.bus_type))
-            })
-            .unwrap_or_else(|| disk_service::detect_from_model_name(&drive.model));
+        // USB 인터페이스는 MediaType/모델명 판별 전에 먼저 확정
+        let disk_type = if drive.interface_type.as_deref() == Some("USB") {
+            disk_service::DiskType::Usb
+        } else {
+            // MSFT_PhysicalDisk 인덱스 대응 → MediaType=0(Unknown)이면 모델명 키워드 폴백
+            let from_wmi = physical_disks
+                .get(i)
+                .and_then(|pd| {
+                    pd.media_type
+                        .map(|mt| disk_service::media_type_to_disk_type(mt, pd.bus_type))
+                });
+            match from_wmi {
+                Some(t) if t != disk_service::DiskType::Unknown => t,
+                _ => disk_service::detect_from_model_name(&drive.model),
+            }
+        };
 
         items.push(SystemInfoItem::new(&label, "타입", &disk_type.to_string()));
     }

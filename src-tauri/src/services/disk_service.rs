@@ -8,6 +8,7 @@ pub enum DiskType {
     SsdNvme,
     Ssd,
     Hdd,
+    Usb,
     Unknown,
 }
 
@@ -17,6 +18,7 @@ impl std::fmt::Display for DiskType {
             DiskType::SsdNvme => write!(f, "SSD (NVMe)"),
             DiskType::Ssd => write!(f, "SSD"),
             DiskType::Hdd => write!(f, "HDD"),
+            DiskType::Usb => write!(f, "USB 저장장치"),
             DiskType::Unknown => write!(f, "알 수 없음"),
         }
     }
