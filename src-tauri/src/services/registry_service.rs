@@ -52,8 +52,27 @@ pub mod windows {
                     display_version
                 };
 
+                // Windows 11에서도 ProductName이 "Windows 10 Pro"를 반환하는 MS 버그 대응:
+                // OS 이름 접두사를 제거하고 실제 os_name과 조합
+                let edition_suffix = product_name
+                    .strip_prefix("Windows 10 ")
+                    .or_else(|| product_name.strip_prefix("Windows 11 "))
+                    .or_else(|| product_name.strip_prefix("Windows "))
+                    .unwrap_or(&product_name);
+                let product_display = format!("{} {}", os_name, edition_suffix);
+
                 let install_date_raw = get_u32(&k, "InstallDate");
-                let install_language = get(&k, "InstallLanguage");
+
+                // InstallLanguage 키가 없는 시스템을 위해 Nls\Language\Default로 폴백
+                let install_language_raw = get(&k, "InstallLanguage");
+                let install_language = if !install_language_raw.is_empty() {
+                    install_language_raw
+                } else {
+                    RegKey::predef(HKEY_LOCAL_MACHINE)
+                        .open_subkey(r"SYSTEM\CurrentControlSet\Control\Nls\Language")
+                        .and_then(|lk| lk.get_value::<String, _>("Default"))
+                        .unwrap_or_default()
+                };
 
                 let arch = RegKey::predef(HKEY_LOCAL_MACHINE)
                     .open_subkey(
@@ -64,7 +83,7 @@ pub mod windows {
 
                 WindowsVersionInfo {
                     os_name: os_name.to_string(),
-                    product_name,
+                    product_name: product_display,
                     display_version: version,
                     build_number: current_build,
                     ubr,

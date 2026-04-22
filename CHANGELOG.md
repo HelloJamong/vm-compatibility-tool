@@ -1,5 +1,27 @@
 # Changelog
 
+## [Release-v26.04.06] - 2026-04-22
+
+### 주요 변경사항 요약
+
+#### 운영체제 에디션 오표시 수정
+- Windows 11에서도 `ProductName` 레지스트리가 `"Windows 10 Pro"`를 반환하는 Microsoft 버그 대응
+- `ProductName`의 OS 이름 접두사를 제거하고 빌드 번호 기반 `os_name`과 조합하여 정확한 에디션 표시
+  - 수정 전: `Windows 10 Pro` (빌드 26200 시스템에서 잘못 표시)
+  - 수정 후: `Windows 11 Pro`
+
+#### 설치 언어 수집 오류 수정
+- `InstallLanguage` 레지스트리 키가 없는 시스템에서 "알 수 없음"으로 표시되던 문제 수정
+- `InstallLanguage`가 비어있을 경우 `SYSTEM\...\Nls\Language\Default` 키로 폴백하여 시스템 로케일 수집
+
+#### Windows 업데이트 수집 성능 개선
+- 진행률이 95%에서 2분 이상 정체되던 문제 수정
+- 전체 업데이트 이력(`$count`) 전체 로드에서 최신 300건으로 제한
+  - Windows Defender 정의 업데이트 등 수천 건 누적 이력 전체 조회 방지
+  - 최신 300건은 3개월치 KB 업데이트를 모두 포함하기에 충분
+
+---
+
 ## [Release-v26.04.05] - 2026-04-22
 
 ### 주요 변경사항 요약

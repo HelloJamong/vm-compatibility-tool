@@ -364,7 +364,8 @@ try {
     $searcher = $session.CreateUpdateSearcher()
     $count    = $searcher.GetTotalHistoryCount()
     if ($count -eq 0) { exit 0 }
-    $history  = $searcher.QueryHistory(0, $count)
+    $limit    = [Math]::Min($count, 300)
+    $history  = $searcher.QueryHistory(0, $limit)
     $results  = $history | Where-Object {
         $_.Date -ge $cutoff -and $_.ResultCode -eq 2
     } | ForEach-Object {
