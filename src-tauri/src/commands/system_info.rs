@@ -38,6 +38,7 @@ fn collect_all_system_info() -> anyhow::Result<Vec<SystemInfoItem>> {
     collect_motherboard_info(&mut items);
     collect_gpu_info(&mut items);
     collect_power_info(&mut items);
+    collect_windows_update_info(&mut items);
     event_log_service::collect_event_log_info(&mut items);
 
     Ok(items)
@@ -55,6 +56,9 @@ fn collect_os_info(items: &mut Vec<SystemInfoItem>) {
         &format!("{}.{}", info.build_number, info.ubr),
     ));
     items.push(SystemInfoItem::new("운영체제", "에디션", &info.product_name));
+    items.push(SystemInfoItem::new("운영체제", "아키텍처", &info.architecture));
+    items.push(SystemInfoItem::new("운영체제", "설치 날짜", &info.install_date));
+    items.push(SystemInfoItem::new("운영체제", "설치 언어", &info.install_language));
 }
 
 // ── CPU 정보 (WMI) ─────────────────────────────────────────────────────────
@@ -345,6 +349,75 @@ fn collect_power_info(items: &mut Vec<SystemInfoItem>) {
 #[cfg(not(windows))]
 fn collect_power_info(items: &mut Vec<SystemInfoItem>) {
     items.push(SystemInfoItem::error("전원", "Windows 전용 기능"));
+}
+
+// ── Windows 업데이트 이력 (PowerShell WUA COM) ─────────────────────────────
+
+#[cfg(windows)]
+fn collect_windows_update_info(items: &mut Vec<SystemInfoItem>) {
+    use crate::services::process_service;
+
+    let script = r#"
+$cutoff = (Get-Date).AddDays(-90)
+try {
+    $session  = New-Object -ComObject Microsoft.Update.Session
+    $searcher = $session.CreateUpdateSearcher()
+    $count    = $searcher.GetTotalHistoryCount()
+    if ($count -eq 0) { exit 0 }
+    $history  = $searcher.QueryHistory(0, $count)
+    $results  = $history | Where-Object {
+        $_.Date -ge $cutoff -and $_.ResultCode -eq 2
+    } | ForEach-Object {
+        if ($_.Title -match '(KB\d+)') {
+            "$($_.Date.ToString('yyyy-MM-dd'))|$($Matches[1])"
+        }
+    } | Where-Object { $_ } | Select-Object -Unique
+    if ($results) { $results | Write-Output }
+} catch {
+    Write-Error $_.Exception.Message
+}
+"#;
+
+    let result = process_service::run_powershell(script);
+
+    if !result.success && result.stdout.trim().is_empty() {
+        let msg = result.stderr.trim();
+        items.push(SystemInfoItem::error(
+            "Windows 업데이트",
+            if msg.is_empty() { "수집 실패" } else { msg },
+        ));
+        return;
+    }
+
+    let mut count = 0u32;
+    for line in result.stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.splitn(2, '|');
+        if let (Some(date), Some(kb)) = (parts.next(), parts.next()) {
+            let date = date.trim();
+            let kb = kb.trim();
+            if !kb.is_empty() && !date.is_empty() {
+                items.push(SystemInfoItem::new("Windows 업데이트", kb, date));
+                count += 1;
+            }
+        }
+    }
+
+    if count == 0 {
+        items.push(SystemInfoItem::new(
+            "Windows 업데이트",
+            "최근 3개월",
+            "업데이트 기록 없음",
+        ));
+    }
+}
+
+#[cfg(not(windows))]
+fn collect_windows_update_info(items: &mut Vec<SystemInfoItem>) {
+    items.push(SystemInfoItem::error("Windows 업데이트", "Windows 전용 기능"));
 }
 
 // ── 유틸 함수 ──────────────────────────────────────────────────────────────

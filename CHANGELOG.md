@@ -1,5 +1,24 @@
 # Changelog
 
+## [Release-v26.04.05] - 2026-04-22
+
+### 주요 변경사항 요약
+
+#### 운영체제 수집 항목 확장
+- 기존 이름 / 버전 / 빌드 / 에디션 4개 항목에 3개 추가
+  - **아키텍처**: `SYSTEM\...\Environment\PROCESSOR_ARCHITECTURE` — `x64 (AMD64)` / `ARM64` / `x86 (32비트)` 로 변환
+  - **설치 날짜**: `InstallDate` (DWORD Unix timestamp) → `YYYY-MM-DD` 형식으로 변환
+  - **설치 언어**: `InstallLanguage` (LCID hex) → 한국어 / 영어 (미국) / 일본어 / 중국어 (간체/번체) 매핑, 미지원 코드는 원문 표시
+- 모든 항목은 기존 CSV 자동 저장에 그대로 포함됨
+
+#### Windows 업데이트 이력 수집 추가
+- 최근 90일 이내 설치 성공한 업데이트의 KB 카탈로그 번호를 CSV에 기록
+- PowerShell `Microsoft.Update.Session` COM (WUA) 기반 — `Win32_QuickFixEngineering` 대비 누락 없는 전체 이력 조회
+- CSV 출력 형태: `Windows 업데이트 | KB5034441 | 2025-03-15` (항목당 1행)
+- 3개월 내 기록 없음 → `최근 3개월 | 업데이트 기록 없음` 1행, COM 오류 시 오류 메시지 기록
+
+---
+
 ## [Release-v26.04.04] - 2026-04-20
 
 ### 주요 변경사항 요약

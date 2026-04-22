@@ -52,12 +52,25 @@ pub mod windows {
                     display_version
                 };
 
+                let install_date_raw = get_u32(&k, "InstallDate");
+                let install_language = get(&k, "InstallLanguage");
+
+                let arch = RegKey::predef(HKEY_LOCAL_MACHINE)
+                    .open_subkey(
+                        r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+                    )
+                    .and_then(|ek| ek.get_value::<String, _>("PROCESSOR_ARCHITECTURE"))
+                    .unwrap_or_default();
+
                 WindowsVersionInfo {
                     os_name: os_name.to_string(),
                     product_name,
                     display_version: version,
                     build_number: current_build,
                     ubr,
+                    install_date: unix_ts_to_date(install_date_raw),
+                    install_language: lcid_to_name(&install_language),
+                    architecture: arch_to_display(&arch),
                 }
             }
             None => WindowsVersionInfo::unknown(),
@@ -97,6 +110,9 @@ pub mod windows {
         pub display_version: String,
         pub build_number: String,
         pub ubr: u32,
+        pub install_date: String,
+        pub install_language: String,
+        pub architecture: String,
     }
 
     impl WindowsVersionInfo {
@@ -107,7 +123,41 @@ pub mod windows {
                 display_version: "알 수 없음".to_string(),
                 build_number: "0".to_string(),
                 ubr: 0,
+                install_date: "알 수 없음".to_string(),
+                install_language: "알 수 없음".to_string(),
+                architecture: "알 수 없음".to_string(),
             }
+        }
+    }
+
+    fn unix_ts_to_date(ts: u32) -> String {
+        if ts == 0 {
+            return "알 수 없음".to_string();
+        }
+        chrono::DateTime::from_timestamp(ts as i64, 0)
+            .map(|dt| dt.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| "알 수 없음".to_string())
+    }
+
+    fn arch_to_display(arch: &str) -> String {
+        match arch.to_uppercase().as_str() {
+            "AMD64" => "x64 (AMD64)".to_string(),
+            "ARM64" => "ARM64".to_string(),
+            "X86" => "x86 (32비트)".to_string(),
+            other if !other.is_empty() => other.to_string(),
+            _ => "알 수 없음".to_string(),
+        }
+    }
+
+    fn lcid_to_name(lcid_hex: &str) -> String {
+        match lcid_hex.to_lowercase().trim_start_matches('0') {
+            "409" => "영어 (미국)".to_string(),
+            "412" => "한국어".to_string(),
+            "411" => "일본어".to_string(),
+            "804" => "중국어 (간체)".to_string(),
+            "404" => "중국어 (번체)".to_string(),
+            other if !other.is_empty() => lcid_hex.to_string(),
+            _ => "알 수 없음".to_string(),
         }
     }
 }
@@ -136,6 +186,9 @@ pub mod windows {
         pub display_version: String,
         pub build_number: String,
         pub ubr: u32,
+        pub install_date: String,
+        pub install_language: String,
+        pub architecture: String,
     }
 
     pub fn get_windows_version() -> WindowsVersionInfo {
@@ -145,6 +198,9 @@ pub mod windows {
             display_version: String::new(),
             build_number: "0".to_string(),
             ubr: 0,
+            install_date: String::new(),
+            install_language: String::new(),
+            architecture: String::new(),
         }
     }
 }
