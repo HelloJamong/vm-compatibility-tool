@@ -328,7 +328,7 @@
 
   function startInspectionActions() {
     inspectionModalOpen = false;
-    showPanel("disable");
+    openDisableActionModal();
   }
 
   async function confirmReboot() {
@@ -427,6 +427,13 @@
       optional_registry_ids: isSelected
         ? disableActionOptions.optional_registry_ids.filter((id) => id !== manifestId)
         : [...disableActionOptions.optional_registry_ids, manifestId],
+    };
+  }
+
+  function toggleDisableOption(group: DisableGroup) {
+    disableActionOptions = {
+      ...disableActionOptions,
+      [group]: !disableActionOptions[group],
     };
   }
 
@@ -553,6 +560,7 @@
     changeCsvPath={disableActionChangeCsvPath}
     {version}
     onStart={startDisableAction}
+    onToggleDisableOption={toggleDisableOption}
     onToggleOptionalRegistry={toggleOptionalRegistrySelection}
     onCancel={closeDisableActionModal}
     onRebootNow={rebootNow}

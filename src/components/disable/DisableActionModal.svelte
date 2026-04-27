@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DisableOptions, VirtItem } from "../../lib/app-types";
+  import type { DisableGroup, DisableOptions, VirtItem } from "../../lib/app-types";
 
   type Stage = "warning" | "running" | "complete";
 
@@ -16,6 +16,7 @@
     changeCsvPath: string | null;
     version: string;
     onStart: () => void;
+    onToggleDisableOption: (group: DisableGroup) => void;
     onToggleOptionalRegistry: (manifestId: string) => void;
     onCancel: () => void;
     onRebootNow: () => void;
@@ -35,6 +36,7 @@
     changeCsvPath,
     version,
     onStart,
+    onToggleDisableOption,
     onToggleOptionalRegistry,
     onCancel,
     onRebootNow,
@@ -44,11 +46,30 @@
   let rebootDeclined = $state(false);
 
   const taskList = $derived([
-    { label: "Hyper-V 및 관련 기능 제거 (DISM)", on: disableOptions.hyperv },
-    { label: "WSL 기능 제거 (DISM)", on: disableOptions.wsl },
-    { label: "VBS 레지스트리 비활성화", on: disableOptions.vbs },
-    { label: "코어 격리 비활성화", on: disableOptions.core_isolation },
-    { label: "Hypervisor 시작 유형 비활성화 (bcdedit)", on: disableOptions.hyperv },
+    {
+      key: "hyperv" as DisableGroup,
+      label: "Hyper-V 및 하이퍼바이저 비활성화",
+      description: "Hyper-V 관련 Windows 기능 제거와 hypervisorlaunchtype / vsmlaunchtype off를 함께 수행합니다.",
+      on: disableOptions.hyperv,
+    },
+    {
+      key: "wsl" as DisableGroup,
+      label: "WSL 기능 비활성화",
+      description: "WSL 및 VirtualMachinePlatform Windows 기능을 비활성화합니다.",
+      on: disableOptions.wsl,
+    },
+    {
+      key: "vbs" as DisableGroup,
+      label: "VBS 레지스트리 비활성화",
+      description: "DeviceGuard / Credential Guard / LSA 관련 VBS 값을 비활성 상태로 변경합니다.",
+      on: disableOptions.vbs,
+    },
+    {
+      key: "core_isolation" as DisableGroup,
+      label: "코어 격리 비활성화",
+      description: "HVCI 및 코어 격리 관련 레지스트리 값을 비활성 상태로 변경합니다.",
+      on: disableOptions.core_isolation,
+    },
   ]);
 
   const activeTasks = $derived(taskList.filter((t) => t.on));
@@ -87,21 +108,22 @@
 
           <section class="summary-card">
             <div class="summary-header">
-              <span class="summary-title">조치 예정 항목</span>
-              <span class="summary-count summary-count--danger">{totalSelectedTaskCount}개 작업</span>
+              <span class="summary-title">기본 조치 선택</span>
+              <span class="summary-count summary-count--danger">선택 {activeTasks.length}개</span>
             </div>
-            <div class="task-list">
-              {#each activeTasks as task}
-                <div class="task-item">
-                  <span class="task-dot">!</span>
-                  <span>{task.label}</span>
-                </div>
-              {/each}
-              {#each selectedOptionalTasks as task}
-                <div class="task-item task-item--optional">
-                  <span class="task-dot task-dot--optional">+</span>
-                  <span>{task.category}</span>
-                </div>
+            <div class="action-option-list">
+              {#each taskList as task}
+                <label class="action-option-item" class:action-option-item--off={!task.on}>
+                  <input
+                    type="checkbox"
+                    checked={task.on}
+                    onchange={() => onToggleDisableOption(task.key)}
+                  />
+                  <span class="action-option-copy">
+                    <span class="action-option-title">{task.label}</span>
+                    <span class="action-option-description">{task.description}</span>
+                  </span>
+                </label>
               {/each}
             </div>
           </section>
@@ -110,7 +132,9 @@
             <section class="summary-card summary-card--optional">
               <div class="summary-header">
                 <span class="summary-title">추가 선택 가능한 레지스트리 조치</span>
-                <span class="summary-count summary-count--neutral">{optionalRegistryCandidates.length}개 후보</span>
+                <span class="summary-count summary-count--neutral">
+                  선택 {selectedOptionalTasks.length} / 후보 {optionalRegistryCandidates.length}개
+                </span>
               </div>
               <div class="optional-list">
                 {#each optionalRegistryCandidates as item}
@@ -379,18 +403,69 @@
     line-height: 1.55;
   }
 
-  .task-item--optional {
-    color: #92400e;
-  }
-
-  .task-dot--optional {
-    background: #f59e0b;
-  }
-
   .optional-list {
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+
+  .action-option-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .action-option-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 10px 11px;
+    border: 1px solid #fecaca;
+    border-radius: 12px;
+    background: #fff7f7;
+    font-size: 13px;
+    color: #3d5170;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .action-option-item--off {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+    color: #94a3b8;
+  }
+
+  .action-option-item input {
+    margin-top: 2px;
+    width: 16px;
+    height: 16px;
+    accent-color: #ef4444;
+    cursor: pointer;
+  }
+
+  .action-option-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .action-option-title {
+    font-weight: 800;
+    color: #991b1b;
+  }
+
+  .action-option-item--off .action-option-title {
+    color: #64748b;
+  }
+
+  .action-option-description {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #7f1d1d;
+  }
+
+  .action-option-item--off .action-option-description {
+    color: #94a3b8;
   }
 
   .optional-item {
@@ -425,34 +500,6 @@
     font-size: 12px;
     line-height: 1.5;
     color: #92400e;
-  }
-
-  .task-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .task-item {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    font-size: 12px;
-    color: #3d5170;
-  }
-
-  .task-dot {
-    flex: 0 0 auto;
-    width: 18px;
-    height: 18px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    font-size: 11px;
-    font-weight: 700;
-    color: #ffffff;
-    background: #ef4444;
   }
 
   .progress-track {
