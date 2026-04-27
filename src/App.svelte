@@ -29,6 +29,8 @@
     virtualization_csv_path: string;
     installed_programs_csv_path: string;
   };
+  type InspectionStage = "idle" | "collecting" | "saving" | "complete";
+  type InspectionTask = "preparing" | "system" | "virtualization" | "installedPrograms" | "saving" | "complete";
 
   let currentPanel = $state<Panel>("menu");
   let status = $state("준비됨");
@@ -50,7 +52,8 @@
   let inspectionInstalledProgramsResultPath = $state<string | null>(null);
   let inspectionResultSaveError = $state<string | null>(null);
   let inspectionProgress = $state(0);
-  let inspectionStage = $state<"idle" | "collecting" | "saving" | "complete">("idle");
+  let inspectionStage = $state<InspectionStage>("idle");
+  let inspectionActiveTask = $state<InspectionTask>("preparing");
   let systemDone = $state(false);
   let virtDone = $state(false);
   let installedProgramsDone = $state(false);
@@ -77,6 +80,14 @@
   });
   let progressValue = $state<number | null>(null);
   let inspectionProgressTimer: ReturnType<typeof setInterval> | null = null;
+  const inspectionTaskProgress: Record<InspectionTask, { activeCap: number; complete: number; label: string }> = {
+    preparing: { activeCap: 4, complete: 5, label: "점검 준비 중..." },
+    system: { activeCap: 32, complete: 35, label: "시스템 정보 수집 중..." },
+    virtualization: { activeCap: 62, complete: 65, label: "가상화 설정 점검 중..." },
+    installedPrograms: { activeCap: 87, complete: 90, label: "설치된 프로그램 목록 수집 중..." },
+    saving: { activeCap: 98, complete: 99, label: "점검 결과 CSV 저장 중..." },
+    complete: { activeCap: 100, complete: 100, label: "점검 완료" },
+  };
 
   onDestroy(() => {
     if (inspectionProgressTimer) {
@@ -93,11 +104,16 @@
     // 앱 시작 시 자동 점검 — 패널 전환 없이 백그라운드 실행
     status = "자동 점검 시작 중...";
     inspectionStage = "collecting";
+    inspectionActiveTask = "preparing";
     startInspectionProgressTimer();
-    await Promise.all([fetchSystemInfo(), fetchVirtStatus(), fetchInstalledPrograms()]);
+
+    await runInspectionStep("system", fetchSystemInfo);
+    await runInspectionStep("virtualization", fetchVirtStatus);
+    await runInspectionStep("installedPrograms", fetchInstalledPrograms);
 
     inspectionStage = "saving";
-    inspectionCurrentAction = "점검 결과 CSV 저장 중...";
+    inspectionActiveTask = "saving";
+    inspectionCurrentAction = inspectionTaskProgress.saving.label;
     try {
       const exportResult = await invoke<InspectionExportOutput>("export_inspection_csvs_auto", {
         systemItems,
@@ -110,10 +126,12 @@
     } catch (e) {
       inspectionResultSaveError = `${e}`;
     }
+    inspectionProgress = Math.max(inspectionProgress, inspectionTaskProgress.saving.complete);
 
     inspectionStage = "complete";
+    inspectionActiveTask = "complete";
     inspectionProgress = 100;
-    inspectionCurrentAction = "점검 완료";
+    inspectionCurrentAction = inspectionTaskProgress.complete.label;
     stopInspectionProgressTimer();
 
     status = inspectionSystemResultPath && inspectionVirtResultPath && inspectionInstalledProgramsResultPath
@@ -123,6 +141,13 @@
 
   function showPanel(panel: Panel) {
     currentPanel = panel;
+  }
+
+  async function runInspectionStep(task: InspectionTask, action: () => Promise<void>) {
+    inspectionActiveTask = task;
+    inspectionCurrentAction = inspectionTaskProgress[task].label;
+    await action();
+    inspectionProgress = Math.max(inspectionProgress, inspectionTaskProgress[task].complete);
   }
 
   async function fetchSystemInfo() {
@@ -478,41 +503,25 @@
 
   function startInspectionProgressTimer() {
     stopInspectionProgressTimer();
-    inspectionProgress = 3;
-    inspectionCurrentAction = "시스템 점검 준비 중...";
+    inspectionProgress = 1;
+    inspectionCurrentAction = inspectionTaskProgress.preparing.label;
     inspectionProgressTimer = setInterval(() => {
       if (inspectionStage === "complete") {
         inspectionProgress = 100;
+        inspectionCurrentAction = inspectionTaskProgress.complete.label;
         return;
       }
 
-      if (inspectionStage === "saving") {
-        const target = 97;
-        if (inspectionProgress < target) {
-          inspectionProgress = Math.min(
-            target,
-            inspectionProgress + Math.max(1, Math.ceil((target - inspectionProgress) / 8))
-          );
-        }
-      } else if (systemDone || virtDone || installedProgramsDone) {
-        const target = 95;
-        if (inspectionProgress < target) {
-          inspectionProgress = Math.min(
-            target,
-            inspectionProgress + Math.max(1, Math.ceil((target - inspectionProgress) / 12))
-          );
-        }
-      } else {
-        const target = 78;
-        if (inspectionProgress < target) {
-          inspectionProgress = Math.min(
-            target,
-            inspectionProgress + Math.max(1, Math.ceil((target - inspectionProgress) / 16))
-          );
-        }
-      }
+      const activeTask = inspectionStage === "saving" ? "saving" : inspectionActiveTask;
+      const { activeCap, label } = inspectionTaskProgress[activeTask];
+      inspectionCurrentAction = label;
 
-      inspectionCurrentAction = nextInspectionAction();
+      if (inspectionProgress < activeCap) {
+        inspectionProgress = Math.min(
+          activeCap,
+          inspectionProgress + Math.max(1, Math.ceil((activeCap - inspectionProgress) / 12))
+        );
+      }
     }, 180);
   }
 
@@ -521,47 +530,6 @@
       clearInterval(inspectionProgressTimer);
       inspectionProgressTimer = null;
     }
-  }
-  function nextInspectionAction(): string {
-    if (inspectionStage === "saving") return "점검 결과 CSV 저장 중...";
-    if (inspectionStage === "complete") return "점검 완료";
-
-    if (systemDone && !virtDone) {
-      return pickAction([
-        "Hyper-V 기능 상태 수집 중...",
-        "WSL / VirtualMachinePlatform 상태 수집 중...",
-        "VBS 레지스트리 수집 중...",
-        "코어 격리 레지스트리 수집 중...",
-        "설치된 프로그램 목록 수집 중...",
-      ]);
-    }
-
-    if (!systemDone && virtDone) {
-      return pickAction([
-        "운영체제 정보 수집 중...",
-        "CPU / 메모리 정보 수집 중...",
-        "디스크 / 부팅 정보 수집 중...",
-        "메인보드 / GPU 정보 수집 중...",
-        "이벤트 로그 수집 중...",
-        "설치된 프로그램 목록 수집 중...",
-      ]);
-    }
-
-    return pickAction([
-      "운영체제 정보 수집 중...",
-      "CPU / 메모리 정보 수집 중...",
-      "디스크 / 부팅 정보 수집 중...",
-      "Hyper-V 기능 상태 수집 중...",
-      "WSL / VirtualMachinePlatform 상태 수집 중...",
-      "VBS 레지스트리 수집 중...",
-      "코어 격리 레지스트리 수집 중...",
-      "설치된 프로그램 목록 수집 중...",
-      "이벤트 로그 수집 중...",
-    ]);
-  }
-
-  function pickAction(actions: string[]): string {
-    return actions[Math.floor((inspectionProgress / 7) % actions.length)] ?? "점검 진행 중...";
   }
 </script>
 
