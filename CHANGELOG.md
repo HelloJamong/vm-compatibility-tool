@@ -1,5 +1,26 @@
 # Changelog
 
+## [Release-v26.04.09] - 2026-04-27
+
+> 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.
+> `v26.04.09`는 2026년 4월의 9번째 정식 Release 버전을 의미한다.
+
+### 주요 변경사항 요약
+
+#### 설치된 프로그램 / 앱 목록 CSV 품질 개선
+- `Programs.csv`에 Windows 내부 Appx 시스템 패키지가 과도하게 포함되던 문제 수정
+  - GUID 형태 패키지 이름 제외
+  - `MicrosoftWindows.*` 계열 내부 패키지 제외
+  - ShellExperienceHost, StartMenuExperienceHost, LockApp, OOBE, PrintDialog 등 설정 앱의 “설치된 앱” 목록에 보이지 않는 시스템 구성 패키지 제외
+- Appx 수집 범위를 `Get-AppxPackage -AllUsers`에서 현재 사용자 기준 `Get-AppxPackage`로 조정
+  - 다른 사용자 또는 과거 상태에 남은 패키지가 CSV에 섞이는 가능성 축소
+- Appx 패키지 표시명을 `Get-StartApps` / manifest 표시명 기준으로 보정
+  - 가능한 경우 패키지 ID 대신 사용자가 보는 앱 이름에 가까운 값 저장
+- Appx 게시자 DN 문자열을 사람이 읽기 쉬운 제조사명으로 정규화
+  - 예: `CN=Microsoft Corporation, O=Microsoft Corporation, ...` → `Microsoft Corporation`
+
+---
+
 ## [Release-v26.04.08] - 2026-04-27
 
 > 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.

@@ -131,11 +131,103 @@ fn collect_appx_packages() -> Vec<InstalledProgramItem> {
     }
 
     let script = r#"
-$packages = Get-AppxPackage -AllUsers |
-  Where-Object { -not $_.IsFramework } |
+$startAppNames = @{}
+Get-StartApps -ErrorAction SilentlyContinue | ForEach-Object {
+  if ($_.AppID -match '^(.+?)!') {
+    $familyName = $Matches[1]
+    if (-not $startAppNames.ContainsKey($familyName)) {
+      $startAppNames[$familyName] = $_.Name
+    }
+  }
+}
+
+function Test-GuidName([string]$value) {
+  if ([string]::IsNullOrWhiteSpace($value)) {
+    return $false
+  }
+  $guid = [Guid]::Empty
+  return [Guid]::TryParse($value, [ref]$guid)
+}
+
+function Test-InternalAppxPackage($package) {
+  $name = [string]$package.Name
+  $publisher = [string]$package.Publisher
+
+  if ($package.IsFramework -or $package.IsResourcePackage -or $package.NonRemovable) {
+    return $true
+  }
+  if ($package.SignatureKind -eq 'System') {
+    return $true
+  }
+  if (Test-GuidName $name) {
+    return $true
+  }
+  if ($publisher -like 'CN=Microsoft Windows,*') {
+    return $true
+  }
+  if ($name -match '^MicrosoftWindows\.') {
+    return $true
+  }
+  if ($name -in @(
+    'Microsoft.AAD.BrokerPlugin',
+    'Microsoft.AccountsControl',
+    'Microsoft.BioEnrollment',
+    'Microsoft.CredDialogHost',
+    'Microsoft.LockApp',
+    'Microsoft.Windows.Apprep.ChxApp',
+    'Microsoft.Windows.AssignedAccessLockApp',
+    'Microsoft.Windows.CapturePicker',
+    'Microsoft.Windows.CloudExperienceHost',
+    'Microsoft.Windows.ContentDeliveryManager',
+    'Microsoft.Windows.OOBENetworkCaptivePortal',
+    'Microsoft.Windows.OOBENetworkConnectionFlow',
+    'Microsoft.Windows.ParentalControls',
+    'Microsoft.Windows.PeopleExperienceHost',
+    'Microsoft.Windows.PinningConfirmationDialog',
+    'Microsoft.Windows.PrintQueueActionCenter',
+    'Microsoft.Windows.SecureAssessmentBrowser',
+    'Microsoft.Windows.ShellExperienceHost',
+    'Microsoft.Windows.StartMenuExperienceHost',
+    'Microsoft.Windows.XGpuEjectDialog',
+    'NcsiUwpApp',
+    'Windows.CBSPreview',
+    'Windows.PrintDialog',
+    'windows.immersivecontrolpanel'
+  )) {
+    return $true
+  }
+
+  return $false
+}
+
+function Get-ManifestText($package, [string]$propertyName) {
+  try {
+    $manifest = Get-AppxPackageManifest -Package $package.PackageFullName -ErrorAction Stop
+    $value = $manifest.Package.Properties.$propertyName
+    if ($value -and -not ([string]$value).StartsWith('ms-resource:')) {
+      return [string]$value
+    }
+  } catch {
+  }
+  return ''
+}
+
+$packages = Get-AppxPackage |
+  Where-Object { -not (Test-InternalAppxPackage $_) } |
   Select-Object `
-    @{Name='name';Expression={$_.Name}}, `
-    @{Name='publisher';Expression={$_.Publisher}}, `
+    @{Name='name';Expression={
+      $startName = $startAppNames[$_.PackageFamilyName]
+      if (-not [string]::IsNullOrWhiteSpace($startName)) {
+        $startName
+      } else {
+        $manifestName = Get-ManifestText $_ 'DisplayName'
+        if (-not [string]::IsNullOrWhiteSpace($manifestName)) { $manifestName } else { $_.Name }
+      }
+    }}, `
+    @{Name='publisher';Expression={
+      $manifestPublisher = Get-ManifestText $_ 'PublisherDisplayName'
+      if (-not [string]::IsNullOrWhiteSpace($manifestPublisher)) { $manifestPublisher } else { $_.Publisher }
+    }}, `
     @{Name='install_date';Expression={ if ($_.InstallDate) { $_.InstallDate.ToString('yyyy-MM-dd') } else { '' } }}
 $packages | ConvertTo-Json -Compress
 "#;
@@ -158,12 +250,12 @@ $packages | ConvertTo-Json -Compress
         .into_iter()
         .filter_map(|item| {
             let name = item.name.unwrap_or_default();
-            if name.trim().is_empty() {
+            if should_skip_appx_name(&name) {
                 return None;
             }
             Some(InstalledProgramItem::new(
                 &name,
-                &item.publisher.unwrap_or_default(),
+                &normalize_appx_publisher(&item.publisher.unwrap_or_default()),
                 &item.install_date.unwrap_or_default(),
             ))
         })
@@ -175,9 +267,85 @@ fn collect_appx_packages() -> Vec<InstalledProgramItem> {
     Vec::new()
 }
 
+fn should_skip_appx_name(name: &str) -> bool {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || is_guid_like(trimmed) {
+        return true;
+    }
+
+    if trimmed.starts_with("MicrosoftWindows.") {
+        return true;
+    }
+
+    matches!(
+        trimmed,
+        "Microsoft.AAD.BrokerPlugin"
+            | "Microsoft.AccountsControl"
+            | "Microsoft.BioEnrollment"
+            | "Microsoft.CredDialogHost"
+            | "Microsoft.LockApp"
+            | "Microsoft.Windows.Apprep.ChxApp"
+            | "Microsoft.Windows.AssignedAccessLockApp"
+            | "Microsoft.Windows.CapturePicker"
+            | "Microsoft.Windows.CloudExperienceHost"
+            | "Microsoft.Windows.ContentDeliveryManager"
+            | "Microsoft.Windows.OOBENetworkCaptivePortal"
+            | "Microsoft.Windows.OOBENetworkConnectionFlow"
+            | "Microsoft.Windows.ParentalControls"
+            | "Microsoft.Windows.PeopleExperienceHost"
+            | "Microsoft.Windows.PinningConfirmationDialog"
+            | "Microsoft.Windows.PrintQueueActionCenter"
+            | "Microsoft.Windows.SecureAssessmentBrowser"
+            | "Microsoft.Windows.ShellExperienceHost"
+            | "Microsoft.Windows.StartMenuExperienceHost"
+            | "Microsoft.Windows.XGpuEjectDialog"
+            | "NcsiUwpApp"
+            | "Windows.CBSPreview"
+            | "Windows.PrintDialog"
+            | "windows.immersivecontrolpanel"
+    )
+}
+
+fn is_guid_like(value: &str) -> bool {
+    let parts = value.split('-').collect::<Vec<_>>();
+    if parts.len() != 5 {
+        return false;
+    }
+
+    let expected_lengths = [8, 4, 4, 4, 12];
+    parts
+        .iter()
+        .zip(expected_lengths)
+        .all(|(part, len)| part.len() == len && part.chars().all(|ch| ch.is_ascii_hexdigit()))
+}
+
+fn normalize_appx_publisher(publisher: &str) -> String {
+    let trimmed = publisher.trim();
+    if trimmed.is_empty() || !trimmed.contains('=') {
+        return trimmed.to_string();
+    }
+
+    let organization = distinguished_name_value(trimmed, "O")
+        .filter(|value| !is_guid_like(value))
+        .or_else(|| distinguished_name_value(trimmed, "CN").filter(|value| !is_guid_like(value)));
+
+    organization.map(ToString::to_string).unwrap_or_default()
+}
+
+fn distinguished_name_value<'a>(publisher: &'a str, key: &str) -> Option<&'a str> {
+    publisher.split(',').find_map(|part| {
+        let part = part.trim();
+        let (current_key, value) = part.split_once('=')?;
+        if current_key.trim() != key {
+            return None;
+        }
+        Some(value.trim().trim_matches('"'))
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::normalize_install_date;
+    use super::{normalize_appx_publisher, normalize_install_date, should_skip_appx_name};
 
     #[test]
     fn normalizes_registry_install_date() {
@@ -188,5 +356,36 @@ mod tests {
     fn leaves_unknown_install_date_as_is() {
         assert_eq!(normalize_install_date(""), "");
         assert_eq!(normalize_install_date("2026-04-27"), "2026-04-27");
+    }
+
+    #[test]
+    fn skips_internal_appx_package_names() {
+        assert!(should_skip_appx_name(
+            "1527c705-839a-4832-9118-54d4Bd6a0c89"
+        ));
+        assert!(should_skip_appx_name("MicrosoftWindows.Client.CBS"));
+        assert!(should_skip_appx_name(
+            "Microsoft.Windows.ShellExperienceHost"
+        ));
+        assert!(!should_skip_appx_name("Microsoft.WindowsCalculator"));
+        assert!(!should_skip_appx_name("Notepad++"));
+    }
+
+    #[test]
+    fn normalizes_appx_distinguished_name_publishers() {
+        assert_eq!(
+            normalize_appx_publisher(
+                "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US"
+            ),
+            "Microsoft Corporation"
+        );
+        assert_eq!(
+            normalize_appx_publisher("CN=\"Notepad++\", O=\"Notepad++\", L=Saint Cloud"),
+            "Notepad++"
+        );
+        assert_eq!(
+            normalize_appx_publisher("CN=33F0F141-36F3-4EC2-A77D-51B53D0BA0E4"),
+            ""
+        );
     }
 }
