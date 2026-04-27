@@ -1,6 +1,5 @@
 /// 에러 로그 — %TEMP%\VMCompatibilityTool\error_YYYYMMDD.log
 /// 운영 로그 — {exe_dir}\logs\YYYYMMDD_HHMMSS_{computer_name}.log
-
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -35,6 +34,17 @@ pub struct RegistryBackupEntry {
     pub value: Option<u32>,
 }
 
+/// 비활성화 조치 전/후 비교 CSV 행
+pub struct DisableChangeEntry {
+    pub group: String,
+    pub item: String,
+    pub target: String,
+    pub before: String,
+    pub after: String,
+    pub result: String,
+    pub message: String,
+}
+
 /// 에러 로그 디렉토리 초기화
 pub fn init() {
     let _ = fs::create_dir_all(error_log_dir());
@@ -58,11 +68,7 @@ pub fn log_error(context: &str, error: &str) {
         error
     );
 
-    if let Ok(mut file) = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-    {
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = file.write_all(entry.as_bytes());
     }
 }
@@ -93,6 +99,51 @@ pub fn save_operation_log(
         log_path.to_string_lossy().into_owned(),
         reg_path.to_string_lossy().into_owned(),
     ))
+}
+
+/// 비활성화 조치 전/후 비교 CSV 저장
+/// 반환: CSV 파일 경로 — 실패 시 None
+pub fn save_disable_change_csv(entries: &[DisableChangeEntry]) -> Option<String> {
+    let log_dir = operation_log_dir()?;
+    fs::create_dir_all(&log_dir).ok()?;
+
+    let now = chrono::Local::now();
+    let ts = now.format("%y%m%d_%H%M%S").to_string();
+    let cn = computer_name();
+    let csv_path = log_dir.join(format!("{}_{}-DisableResult.csv", ts, cn));
+
+    write_disable_change_csv(&csv_path, entries, &now)?;
+    Some(csv_path.to_string_lossy().into_owned())
+}
+
+fn write_disable_change_csv(
+    path: &PathBuf,
+    entries: &[DisableChangeEntry],
+    now: &chrono::DateTime<chrono::Local>,
+) -> Option<()> {
+    let mut content = String::new();
+    content.push('\u{FEFF}');
+    content.push_str("VM Compatibility Tool — 조치 전후 비교\n");
+    content.push_str(&format!("생성,{}\n", now.format("%Y-%m-%d %H:%M:%S")));
+    content.push_str(&format!("컴퓨터,{}\n\n", computer_name()));
+    content.push_str("작업 그룹,항목,대상,조치 전,조치 후,결과,메시지\n");
+
+    for entry in entries {
+        content.push_str(&format!(
+            "{},{},{},{},{},{},{}\n",
+            escape_csv(&entry.group),
+            escape_csv(&entry.item),
+            escape_csv(&entry.target),
+            escape_csv(&entry.before),
+            escape_csv(&entry.after),
+            escape_csv(&entry.result),
+            escape_csv(&entry.message),
+        ));
+    }
+
+    let mut file = fs::File::create(path).ok()?;
+    file.write_all(content.as_bytes()).ok()?;
+    Some(())
 }
 
 fn write_operation_log(
@@ -167,4 +218,12 @@ fn encode_utf16le_with_bom(s: &str) -> Vec<u8> {
         bytes.push((unit >> 8) as u8);
     }
     bytes
+}
+
+fn escape_csv(field: &str) -> String {
+    if field.contains(',') || field.contains('\n') || field.contains('"') {
+        format!("\"{}\"", field.replace('"', "\"\""))
+    } else {
+        field.to_string()
+    }
 }

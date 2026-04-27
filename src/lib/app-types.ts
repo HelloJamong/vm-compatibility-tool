@@ -19,6 +19,7 @@ export type DisableOutput = {
   results: DisableResult[];
   log_path: string | null;
   backup_path: string | null;
+  change_csv_path: string | null;
 };
 export type ProgressEvent = {
   step: number;

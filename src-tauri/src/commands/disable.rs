@@ -25,6 +25,26 @@ const WSL_FEATURES: &[&str] = &[
     "VirtualMachinePlatform",
 ];
 
+#[derive(Debug, Clone)]
+enum ChangeTarget {
+    Feature(&'static str),
+    HypervisorLaunchType,
+    VsmLaunchType,
+    Registry {
+        path: String,
+        value_name: &'static str,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct PlannedDisableChange {
+    group: String,
+    item: String,
+    target: String,
+    target_kind: ChangeTarget,
+    before: String,
+}
+
 /// 비활성화 실행
 ///
 /// - `options`: None이면 전체 실행, Some이면 가상화 점검 결과 기반 선택 실행
@@ -86,8 +106,11 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
             results: vec![result],
             log_path: None,
             backup_path: None,
+            change_csv_path: None,
         });
     }
+
+    let planned_changes = collect_planned_disable_changes(&opts);
 
     let total = tasks.len() as u32;
     let mut results = Vec::new();
@@ -146,12 +169,200 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
         Some((lp, bp)) => (Some(lp), Some(bp)),
         None => (None, None),
     };
+    let change_entries = collect_disable_change_results(planned_changes);
+    let change_csv_path = log_service::save_disable_change_csv(&change_entries);
 
     Ok(DisableOutput {
         results,
         log_path,
         backup_path,
+        change_csv_path,
     })
+}
+
+fn collect_planned_disable_changes(opts: &DisableOptions) -> Vec<PlannedDisableChange> {
+    let mut changes = Vec::new();
+
+    if opts.hyperv {
+        for feature in HYPERV_FEATURES {
+            push_change(
+                &mut changes,
+                "Hyper-V",
+                feature,
+                &format!("DISM Feature: {feature}"),
+                ChangeTarget::Feature(feature),
+            );
+        }
+        push_change(
+            &mut changes,
+            "Hyper-V",
+            "Hypervisor 시작 유형",
+            "bcdedit hypervisorlaunchtype",
+            ChangeTarget::HypervisorLaunchType,
+        );
+        push_change(
+            &mut changes,
+            "Hyper-V",
+            "VSM 시작 유형",
+            "bcdedit vsmlaunchtype",
+            ChangeTarget::VsmLaunchType,
+        );
+    }
+
+    if opts.wsl {
+        for feature in WSL_FEATURES {
+            push_change(
+                &mut changes,
+                "WSL",
+                feature,
+                &format!("DISM Feature: {feature}"),
+                ChangeTarget::Feature(feature),
+            );
+        }
+    }
+
+    if opts.vbs {
+        append_registry_changes(
+            &mut changes,
+            "VBS",
+            registry_manifest::disable_write_entries(DisableGroup::Vbs),
+        );
+    }
+
+    if opts.core_isolation {
+        append_registry_changes(
+            &mut changes,
+            "코어 격리",
+            registry_manifest::disable_write_entries(DisableGroup::CoreIsolation),
+        );
+    }
+
+    if !opts.optional_registry_ids.is_empty() {
+        append_registry_changes(
+            &mut changes,
+            "추가 레지스트리 조치",
+            registry_manifest::selected_optional_entries(&opts.optional_registry_ids),
+        );
+    }
+
+    changes
+}
+
+fn push_change(
+    changes: &mut Vec<PlannedDisableChange>,
+    group: &str,
+    item: &str,
+    target: &str,
+    target_kind: ChangeTarget,
+) {
+    let before = read_change_target_value(&target_kind);
+    changes.push(PlannedDisableChange {
+        group: group.to_string(),
+        item: item.to_string(),
+        target: target.to_string(),
+        target_kind,
+        before,
+    });
+}
+
+fn append_registry_changes(
+    changes: &mut Vec<PlannedDisableChange>,
+    group: &str,
+    manifest_entries: Vec<ResolvedRegistryManifestEntry>,
+) {
+    for entry in manifest_entries {
+        push_change(
+            changes,
+            group,
+            entry.label,
+            &format!(r"HKLM\{}\{}", entry.path, entry.value_name),
+            ChangeTarget::Registry {
+                path: entry.path,
+                value_name: entry.value_name,
+            },
+        );
+    }
+}
+
+fn collect_disable_change_results(
+    planned_changes: Vec<PlannedDisableChange>,
+) -> Vec<log_service::DisableChangeEntry> {
+    planned_changes
+        .into_iter()
+        .map(|change| {
+            let after = read_change_target_value(&change.target_kind);
+            let (result, message) = compare_change_values(&change.before, &after);
+            log_service::DisableChangeEntry {
+                group: change.group,
+                item: change.item,
+                target: change.target,
+                before: change.before,
+                after,
+                result,
+                message,
+            }
+        })
+        .collect()
+}
+
+fn compare_change_values(before: &str, after: &str) -> (String, String) {
+    if before == after {
+        (
+            "변경 없음".to_string(),
+            "이미 목표 상태였거나 조치가 값을 변경하지 않았습니다.".to_string(),
+        )
+    } else if after.starts_with("확인 불가") || after.starts_with("오류") {
+        (
+            "확인 불가".to_string(),
+            "조치 후 상태를 확인하지 못했습니다.".to_string(),
+        )
+    } else {
+        ("변경됨".to_string(), format!("{before} → {after}"))
+    }
+}
+
+fn read_change_target_value(target: &ChangeTarget) -> String {
+    match target {
+        ChangeTarget::Feature(feature) => get_feature_state_display(feature),
+        ChangeTarget::HypervisorLaunchType => process_service::get_hypervisor_launch_type(),
+        ChangeTarget::VsmLaunchType => process_service::get_vsm_launch_type(),
+        ChangeTarget::Registry { path, value_name } => registry_value_display(path, value_name),
+    }
+}
+
+fn get_feature_state_display(feature: &str) -> String {
+    let result = process_service::get_feature_state(feature);
+    if !result.success {
+        let message = if result.stderr.trim().is_empty() {
+            result.stdout.trim()
+        } else {
+            result.stderr.trim()
+        };
+        return if message.is_empty() {
+            "확인 불가".to_string()
+        } else {
+            format!("확인 불가: {message}")
+        };
+    }
+
+    parse_dism_feature_state(&result.stdout).unwrap_or_else(|| "확인 불가".to_string())
+}
+
+fn parse_dism_feature_state(stdout: &str) -> Option<String> {
+    stdout.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        if key.trim().eq_ignore_ascii_case("State") {
+            Some(value.trim().to_string())
+        } else {
+            None
+        }
+    })
+}
+
+fn registry_value_display(path: &str, value_name: &str) -> String {
+    reg::get_dword(path, value_name)
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| "<미설정>".to_string())
 }
 
 /// 레지스트리 수정 대상 항목의 현재 값을 수정 전에 수집

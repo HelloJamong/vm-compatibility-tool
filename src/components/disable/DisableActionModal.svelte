@@ -13,6 +13,7 @@
     hasErrors: boolean;
     logPath: string | null;
     backupPath: string | null;
+    changeCsvPath: string | null;
     version: string;
     onStart: () => void;
     onToggleOptionalRegistry: (manifestId: string) => void;
@@ -31,6 +32,7 @@
     hasErrors,
     logPath,
     backupPath,
+    changeCsvPath,
     version,
     onStart,
     onToggleOptionalRegistry,
@@ -180,7 +182,7 @@
               변경 사항을 적용하려면 <strong>시스템 재부팅이 필요</strong>합니다.
             </p>
 
-            {#if logPath || backupPath}
+            {#if logPath || backupPath || changeCsvPath}
               <section class="summary-card">
                 <div class="summary-header">
                   <span class="summary-title">저장된 파일</span>
@@ -190,6 +192,9 @@
                 {/if}
                 {#if backupPath}
                   <p class="summary-message">💾 {basename(backupPath)}</p>
+                {/if}
+                {#if changeCsvPath}
+                  <p class="summary-message">📊 {basename(changeCsvPath)}</p>
                 {/if}
               </section>
             {/if}

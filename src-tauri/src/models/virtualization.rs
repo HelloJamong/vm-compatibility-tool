@@ -99,6 +99,7 @@ pub struct DisableOutput {
     pub results: Vec<DisableResult>,
     pub log_path: Option<String>,
     pub backup_path: Option<String>,
+    pub change_csv_path: Option<String>,
 }
 
 /// 실시간 진행 이벤트 (Tauri emit)

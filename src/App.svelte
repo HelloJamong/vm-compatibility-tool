@@ -71,6 +71,7 @@
   let disableActionHasErrors = $state(false);
   let disableActionLogPath = $state<string | null>(null);
   let disableActionBackupPath = $state<string | null>(null);
+  let disableActionChangeCsvPath = $state<string | null>(null);
   let disableActionOptions = $state<DisableOptions>({
     hyperv: false,
     wsl: false,
@@ -300,6 +301,9 @@
       if (output.backup_path) {
         disableLog = [...disableLog, `💾 레지스트리 백업: ${output.backup_path}`];
       }
+      if (output.change_csv_path) {
+        disableLog = [...disableLog, `📊 조치 전후 비교 CSV: ${output.change_csv_path}`];
+      }
       status = output.log_path
         ? `비활성화 완료 — 로그 저장됨`
         : "비활성화 완료 — 재부팅 필요";
@@ -347,6 +351,7 @@
     disableActionHasErrors = false;
     disableActionLogPath = null;
     disableActionBackupPath = null;
+    disableActionChangeCsvPath = null;
     disableActionModalOpen = true;
   }
 
@@ -373,6 +378,7 @@
       disableActionHasErrors = output.results.some((r) => !r.success);
       disableActionLogPath = output.log_path;
       disableActionBackupPath = output.backup_path;
+      disableActionChangeCsvPath = output.change_csv_path;
       for (const result of output.results) {
         disableLog = [...disableLog, "", `${result.success ? "✅" : "⚠️"} ${result.task}`, result.message];
       }
@@ -544,6 +550,7 @@
     hasErrors={disableActionHasErrors}
     logPath={disableActionLogPath}
     backupPath={disableActionBackupPath}
+    changeCsvPath={disableActionChangeCsvPath}
     {version}
     onStart={startDisableAction}
     onToggleOptionalRegistry={toggleOptionalRegistrySelection}
