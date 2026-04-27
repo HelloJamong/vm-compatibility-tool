@@ -1,5 +1,39 @@
 # Changelog
 
+## [Release-v26.04.08] - 2026-04-27
+
+> 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.
+> `v26.04.08`은 2026년 4월의 8번째 정식 Release 버전을 의미한다.
+
+### 주요 변경사항 요약
+
+#### 최초 실행 자동 저장 CSV 확장
+- 프로그램 최초 실행 시 자동 생성되는 CSV 파일을 기존 2개에서 총 3개로 확장
+  - `YYMMDD_HHMMSS_{HostName}-SystemInfo.csv`
+  - `YYMMDD_HHMMSS_{HostName}-reg.csv`
+  - `YYMMDD_HHMMSS_{HostName}-Programs.csv`
+
+#### 설치된 프로그램 / 앱 목록 CSV 추가
+- 제어판 → 프로그램 목록 기준으로 확인 가능한 Win32 설치 프로그램 목록 수집 추가
+  - `HKLM` / `HKCU` Uninstall 레지스트리 확인
+  - 64-bit / 32-bit(`WOW6432Node`) 설치 항목 모두 확인
+- Windows 설정 → 앱 → 설치된 앱 기준으로 확인 가능한 Appx/UWP 앱 목록 수집 추가
+  - `Get-AppxPackage -AllUsers` 기반 수집
+- 새 CSV에 아래 3개 값을 저장
+  - 설치된 프로그램 이름
+  - 제조사
+  - 날짜
+- 레지스트리 `InstallDate`의 `YYYYMMDD` 값은 `YYYY-MM-DD` 형식으로 정규화
+- Windows가 설치 날짜를 제공하지 않는 앱은 날짜 값을 빈 값으로 저장
+- 중복 설치 항목은 프로그램 이름 + 제조사 기준으로 정리 후 이름순으로 정렬
+
+#### 자동 점검 화면 반영
+- 최초 자동 점검 진행 상태에 “설치된 프로그램 목록 수집 중...” 메시지 추가
+- 점검 완료 모달의 저장 파일 목록에 `Programs.csv` 파일명을 함께 표시
+- 상태바 busy 상태에 설치 프로그램 목록 수집 작업을 포함
+
+---
+
 ## [Release-v26.04.07] - 2026-04-22
 
 ### 주요 변경사항 요약

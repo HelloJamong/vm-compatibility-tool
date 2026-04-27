@@ -1,5 +1,6 @@
 export type Panel = "menu" | "systemInfo" | "virtualization" | "disable";
 export type SystemInfoItem = { category: string; item: string; value: string };
+export type InstalledProgramItem = { name: string; publisher: string; install_date: string };
 export type DisableGroup = "hyperv" | "wsl" | "vbs" | "core_isolation";
 export type VirtSource = "unknown" | "wmi" | "feature" | "bcd" | "registry";
 export type VirtItem = {

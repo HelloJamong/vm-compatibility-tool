@@ -10,6 +10,7 @@ pub fn run() {
             commands::system_info::exit_app,
             commands::system_info::get_app_version,
             commands::system_info::get_system_info,
+            commands::installed_programs::get_installed_programs,
             commands::virtualization::get_virtualization_status,
             commands::disable::execute_disable,
             commands::disable::request_reboot,

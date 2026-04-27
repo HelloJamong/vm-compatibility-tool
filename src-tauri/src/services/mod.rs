@@ -1,5 +1,6 @@
 pub mod disk_service;
 pub mod event_log_service;
+pub mod installed_program_service;
 pub mod log_service;
 pub mod process_service;
 pub mod registry_manifest;

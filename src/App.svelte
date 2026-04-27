@@ -17,6 +17,7 @@
     DisableGroup,
     DisableOptions,
     DisableOutput,
+    InstalledProgramItem,
     Panel,
     ProgressEvent,
     SystemInfoItem,
@@ -26,6 +27,7 @@
   type InspectionExportOutput = {
     system_csv_path: string;
     virtualization_csv_path: string;
+    installed_programs_csv_path: string;
   };
 
   let currentPanel = $state<Panel>("menu");
@@ -39,14 +41,19 @@
   let virtItems = $state<VirtItem[]>([]);
   let virtLoading = $state(false);
   let virtChecked = $state(false);
+  let installedProgramItems = $state<InstalledProgramItem[]>([]);
+  let installedProgramsLoading = $state(false);
+  let installedProgramsLoaded = $state(false);
   let inspectionModalOpen = $state(true);
   let inspectionSystemResultPath = $state<string | null>(null);
   let inspectionVirtResultPath = $state<string | null>(null);
+  let inspectionInstalledProgramsResultPath = $state<string | null>(null);
   let inspectionResultSaveError = $state<string | null>(null);
   let inspectionProgress = $state(0);
   let inspectionStage = $state<"idle" | "collecting" | "saving" | "complete">("idle");
   let systemDone = $state(false);
   let virtDone = $state(false);
+  let installedProgramsDone = $state(false);
   let inspectionCurrentAction = $state("점검 준비 중...");
 
   let disableLog = $state<string[]>([]);
@@ -87,7 +94,7 @@
     status = "자동 점검 시작 중...";
     inspectionStage = "collecting";
     startInspectionProgressTimer();
-    await Promise.all([fetchSystemInfo(), fetchVirtStatus()]);
+    await Promise.all([fetchSystemInfo(), fetchVirtStatus(), fetchInstalledPrograms()]);
 
     inspectionStage = "saving";
     inspectionCurrentAction = "점검 결과 CSV 저장 중...";
@@ -95,9 +102,11 @@
       const exportResult = await invoke<InspectionExportOutput>("export_inspection_csvs_auto", {
         systemItems,
         virtItems,
+        installedProgramItems,
       });
       inspectionSystemResultPath = exportResult.system_csv_path;
       inspectionVirtResultPath = exportResult.virtualization_csv_path;
+      inspectionInstalledProgramsResultPath = exportResult.installed_programs_csv_path;
     } catch (e) {
       inspectionResultSaveError = `${e}`;
     }
@@ -107,8 +116,8 @@
     inspectionCurrentAction = "점검 완료";
     stopInspectionProgressTimer();
 
-    status = inspectionSystemResultPath && inspectionVirtResultPath
-      ? `점검 완료 — ${basename(inspectionSystemResultPath)}, ${basename(inspectionVirtResultPath)} 저장됨`
+    status = inspectionSystemResultPath && inspectionVirtResultPath && inspectionInstalledProgramsResultPath
+      ? `점검 완료 — ${basename(inspectionSystemResultPath)}, ${basename(inspectionVirtResultPath)}, ${basename(inspectionInstalledProgramsResultPath)} 저장됨`
       : "점검 완료 — 비활성화 준비됨";
   });
 
@@ -146,6 +155,24 @@
     } finally {
       virtLoading = false;
       progressValue = null;
+    }
+  }
+
+  async function fetchInstalledPrograms() {
+    if (installedProgramsLoaded) return;
+    installedProgramsLoading = true;
+    installedProgramsDone = false;
+    try {
+      installedProgramItems = await invoke<InstalledProgramItem[]>("get_installed_programs");
+      installedProgramsLoaded = true;
+      installedProgramsDone = true;
+    } catch (e) {
+      installedProgramItems = [];
+      installedProgramsLoaded = true;
+      installedProgramsDone = true;
+      status = `설치 프로그램 목록 오류: ${e}`;
+    } finally {
+      installedProgramsLoading = false;
     }
   }
 
@@ -467,7 +494,7 @@
             inspectionProgress + Math.max(1, Math.ceil((target - inspectionProgress) / 8))
           );
         }
-      } else if (systemDone || virtDone) {
+      } else if (systemDone || virtDone || installedProgramsDone) {
         const target = 95;
         if (inspectionProgress < target) {
           inspectionProgress = Math.min(
@@ -505,6 +532,7 @@
         "WSL / VirtualMachinePlatform 상태 수집 중...",
         "VBS 레지스트리 수집 중...",
         "코어 격리 레지스트리 수집 중...",
+        "설치된 프로그램 목록 수집 중...",
       ]);
     }
 
@@ -515,6 +543,7 @@
         "디스크 / 부팅 정보 수집 중...",
         "메인보드 / GPU 정보 수집 중...",
         "이벤트 로그 수집 중...",
+        "설치된 프로그램 목록 수집 중...",
       ]);
     }
 
@@ -526,6 +555,7 @@
       "WSL / VirtualMachinePlatform 상태 수집 중...",
       "VBS 레지스트리 수집 중...",
       "코어 격리 레지스트리 수집 중...",
+      "설치된 프로그램 목록 수집 중...",
       "이벤트 로그 수집 중...",
     ]);
   }
@@ -556,13 +586,14 @@
 {:else if inspectionModalOpen}
   <InspectionSummaryModal
     open={inspectionModalOpen}
-    complete={systemLoaded && virtChecked}
+    complete={systemLoaded && virtChecked && installedProgramsLoaded}
     progressPercent={inspectionProgressPercent()}
     currentAction={inspectionCurrentAction}
     actionSummaries={inspectionActionSummaries(virtItems)}
     savedFilenames={[
       basename(inspectionSystemResultPath),
       basename(inspectionVirtResultPath),
+      basename(inspectionInstalledProgramsResultPath),
     ].filter((value): value is string => Boolean(value))}
     saveError={inspectionResultSaveError}
     {version}
@@ -628,7 +659,7 @@
     <StatusBar
       {status}
       {version}
-      isBusy={systemLoading || virtLoading || disableRunning}
+      isBusy={systemLoading || virtLoading || installedProgramsLoading || disableRunning}
       {progressValue}
     />
 
