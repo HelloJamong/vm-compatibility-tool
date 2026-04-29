@@ -1,6 +1,6 @@
-/// 레지스트리 서비스 — Windows Registry 읽기/쓰기 래퍼
-///
-/// Phase 0 PoC: DeviceGuard VBS 상태 확인, Hyper-V 상태 확인
+//! 레지스트리 서비스 — Windows Registry 읽기/쓰기 래퍼
+//!
+//! Phase 0 PoC: DeviceGuard VBS 상태 확인, Hyper-V 상태 확인
 
 #[cfg(windows)]
 pub mod windows {
@@ -75,9 +75,7 @@ pub mod windows {
                 };
 
                 let arch = RegKey::predef(HKEY_LOCAL_MACHINE)
-                    .open_subkey(
-                        r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
-                    )
+                    .open_subkey(r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment")
                     .and_then(|ek| ek.get_value::<String, _>("PROCESSOR_ARCHITECTURE"))
                     .unwrap_or_default();
 

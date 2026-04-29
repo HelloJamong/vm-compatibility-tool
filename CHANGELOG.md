@@ -1,5 +1,54 @@
 # Changelog
 
+## [Release-v26.04.14] - 2026-04-29
+
+> 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.
+> `v26.04.14`는 2026년 4월의 14번째 정식 Release 버전을 의미한다.
+
+### 주요 변경사항 요약
+
+#### fix: DISM/WSL 비활성화 실패 판정 개선
+- Hyper-V / WSL 관련 DISM Feature 비활성화 결과를 성공, 이미 비활성화 또는 미지원, 실제 실패로 분리해 처리하도록 개선
+- 일반적인 DISM 오류가 `이미 비활성화됨` 또는 `대상 없음`처럼 표시되지 않도록 feature-name 문맥 기반 판정을 추가
+- WSL 비활성화 작업에서 일부 Feature 비활성화가 실패한 경우 전체 결과도 실패로 반환하도록 수정
+- 권한 부족, DISM 오류, component store invalid state 등 실제 실패가 사용자에게 성공처럼 보이지 않도록 보정
+- 비활성화 결과 분류 로직에 대한 회귀 테스트를 추가
+
+#### chore: Rust 포맷 및 clippy 경고 정리
+- 기존 Rust 파일의 포맷 불일치를 `cargo fmt` 기준으로 정리
+- `cargo clippy --target x86_64-pc-windows-msvc -- -D warnings` 기준 경고를 정리
+  - module-level doc comment 정리
+  - 불필요한 `.into()` 제거
+  - 불필요한 `format!()` 제거
+  - 정렬 로직을 `sort_by_key`로 단순화
+
+#### ci: Windows MSVC target 검증 표준화
+- Windows 운영 도구 특성에 맞춰 Rust 검증 기준을 `x86_64-pc-windows-msvc` target으로 명시
+- `package.json`에 Windows target 검증 스크립트 추가
+  - `check:rust:windows`
+  - `check:rust:windows:tests`
+  - `lint:rust:windows`
+  - `verify:windows`
+- beta / release GitHub Actions workflow에 Svelte check와 Windows target Rust 검증 단계를 추가
+- release workflow를 `Release-v*` tag push 시 자동 실행되도록 보완
+- tag push 배포 시 push된 tag와 CHANGELOG 최신 릴리즈 버전이 일치하는지 검증하도록 추가
+- Rocky Linux 9 native target의 GLib 버전 제약을 고려해 README에 Windows target 검증 절차를 문서화
+
+#### docs: 개발 검증 절차 문서화
+- README 빠른 시작 섹션에 Rust Windows target 검증 방법을 추가
+- Rocky Linux 9 계열에서 native Linux Tauri 검증 시 GLib 버전 문제가 발생할 수 있음을 명시
+- 로컬 검증 시 `npm run verify:windows`를 우선 사용하도록 안내
+
+#### 검증
+- `npm run check` 통과
+- `npm run verify:windows` 통과
+- `npm run build` 통과
+- `npm audit --audit-level=moderate` 기준 취약점 0건 확인
+- `cargo fmt --manifest-path src-tauri/Cargo.toml -- --check` 통과
+- diff 보안 패턴 스캔 결과 발견 항목 0건 확인
+
+---
+
 ## [Release-v26.04.13] - 2026-04-29
 
 > 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.

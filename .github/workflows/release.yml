@@ -1,7 +1,10 @@
 name: Release Build
 
 on:
-  workflow_dispatch:   # 실수 방지: 수동 트리거만 허용
+  workflow_dispatch:
+  push:
+    tags:
+      - "Release-v*"
 
 permissions:
   contents: write
@@ -31,7 +34,19 @@ jobs:
             exit 1
           }
 
+      - name: Validate pushed tag matches CHANGELOG.md
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $expected = "${{ steps.ver.outputs.display }}"
+          if ($tag -ne $expected) {
+            Write-Error "Push tag '$tag' does not match latest CHANGELOG.md release '$expected'."
+            exit 1
+          }
+
       - name: Check tag does not already exist
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           git fetch --tags
@@ -58,6 +73,12 @@ jobs:
           cache-on-failure: true
 
       - run: npm ci
+
+      - name: Run Svelte check
+        run: npm run check
+
+      - name: Run Rust Windows target checks
+        run: npm run verify:windows
 
       - name: Inject version into Cargo.toml
         shell: pwsh

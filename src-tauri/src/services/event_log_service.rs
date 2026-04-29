@@ -2,7 +2,6 @@
 ///
 /// 수집 범위: 최근 7일간 System / Application 로그
 /// Level 1=위험, 2=오류, 3=경고 건수 + 최근 오류/위험 이벤트 5건
-
 use crate::models::system_info::SystemInfoItem;
 use crate::services::process_service;
 
@@ -74,6 +73,9 @@ try {
     }
 
     if !has_count {
-        items.push(SystemInfoItem::error("이벤트 로그", "수집 실패 — 관리자 권한 확인"));
+        items.push(SystemInfoItem::error(
+            "이벤트 로그",
+            "수집 실패 — 관리자 권한 확인",
+        ));
     }
 }

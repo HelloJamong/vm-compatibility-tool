@@ -134,7 +134,7 @@ fn write_csv(
     content.push('\u{FEFF}');
 
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
-    content.push_str(&format!("# VM Compatibility Tool\n"));
+    content.push_str("# VM Compatibility Tool\n");
     content.push_str(&format!("# 생성일시: {now}\n\n"));
 
     match data_type {

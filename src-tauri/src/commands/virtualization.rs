@@ -196,8 +196,10 @@ fn check_hypervisor_launch(items: &mut Vec<VirtualizationItem>) {
 
 fn check_vsm_launch(items: &mut Vec<VirtualizationItem>) {
     let vsm_type = process_service::get_vsm_launch_type();
-    let is_active = !matches!(vsm_type.to_lowercase().as_str(), "off" | "미설정" | "확인 불가")
-        && !vsm_type.starts_with("오류");
+    let is_active = !matches!(
+        vsm_type.to_lowercase().as_str(),
+        "off" | "미설정" | "확인 불가"
+    ) && !vsm_type.starts_with("오류");
 
     items.push(
         VirtualizationItem::new(

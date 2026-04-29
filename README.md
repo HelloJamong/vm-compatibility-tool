@@ -135,19 +135,37 @@ npm run tauri dev
 npm run check
 ```
 
-### 4. 포터블 EXE 빌드
+### 4. Rust Windows target 검증
+
+이 프로젝트는 Windows 운영 도구이므로 Rust 검증은 기본적으로 Windows MSVC target 기준으로 수행합니다.
+Rocky Linux 9 계열의 native Linux target은 기본 GLib 버전이 Tauri Linux 의존성 요구사항보다 낮을 수 있으므로,
+로컬 Linux native `cargo test` 대신 아래 Windows target 검증을 우선 사용합니다.
+
+```bash
+npm run verify:windows
+```
+
+개별 명령은 아래와 같습니다.
+
+```bash
+cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc
+cargo check --manifest-path src-tauri/Cargo.toml --tests --target x86_64-pc-windows-msvc
+cargo clippy --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc -- -D warnings
+```
+
+### 5. 포터블 EXE 빌드
 
 ```bash
 npm run tauri build -- --no-bundle
 ```
 
-### 5. NSIS 인스톨러 빌드
+### 6. NSIS 인스톨러 빌드
 
 ```bash
 npm run tauri build -- --bundles nsis
 ```
 
-### 6. Windows용 대화형 빌드 스크립트
+### 7. Windows용 대화형 빌드 스크립트
 
 ```bat
 build.bat

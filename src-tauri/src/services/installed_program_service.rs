@@ -31,7 +31,7 @@ fn dedupe_and_sort(items: Vec<InstalledProgramItem>) -> Vec<InstalledProgramItem
         }
     }
 
-    deduped.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    deduped.sort_by_key(|item| item.name.to_lowercase());
     deduped
 }
 

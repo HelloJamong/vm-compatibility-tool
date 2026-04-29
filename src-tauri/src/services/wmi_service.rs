@@ -1,6 +1,6 @@
-/// WMI 서비스 — Windows Management Instrumentation 쿼리 래퍼
-///
-/// wmi crate는 COM 초기화가 필요하므로 반드시 tokio::task::spawn_blocking 내에서 호출
+//! WMI 서비스 — Windows Management Instrumentation 쿼리 래퍼
+//!
+//! wmi crate는 COM 초기화가 필요하므로 반드시 tokio::task::spawn_blocking 내에서 호출
 
 #[cfg(windows)]
 pub mod windows {
@@ -105,29 +105,23 @@ pub mod windows {
     /// 기본 WMI 연결 (root\cimv2)
     pub fn connect() -> Result<(COMLibrary, WMIConnection)> {
         let com = COMLibrary::new().context("COM 초기화 실패")?;
-        let wmi = WMIConnection::new(com.into()).context("WMI 연결 실패")?;
+        let wmi = WMIConnection::new(com).context("WMI 연결 실패")?;
         Ok((com, wmi))
     }
 
     /// Storage 네임스페이스 WMI 연결 (MSFT_PhysicalDisk용)
     pub fn connect_storage() -> Result<(COMLibrary, WMIConnection)> {
         let com = COMLibrary::new().context("COM 초기화 실패")?;
-        let wmi = WMIConnection::with_namespace_path(
-            "root\\Microsoft\\Windows\\Storage",
-            com.into(),
-        )
-        .context("Storage WMI 연결 실패")?;
+        let wmi = WMIConnection::with_namespace_path("root\\Microsoft\\Windows\\Storage", com)
+            .context("Storage WMI 연결 실패")?;
         Ok((com, wmi))
     }
 
     /// Power 네임스페이스 WMI 연결 (Win32_PowerPlan용)
     pub fn connect_power() -> Result<(COMLibrary, WMIConnection)> {
         let com = COMLibrary::new().context("COM 초기화 실패")?;
-        let wmi = WMIConnection::with_namespace_path(
-            "root\\cimv2\\power",
-            com.into(),
-        )
-        .context("Power WMI 연결 실패")?;
+        let wmi = WMIConnection::with_namespace_path("root\\cimv2\\power", com)
+            .context("Power WMI 연결 실패")?;
         Ok((com, wmi))
     }
 

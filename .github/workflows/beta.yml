@@ -49,6 +49,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Run Svelte check
+        run: npm run check
+
+      - name: Run Rust Windows target checks
+        run: npm run verify:windows
+
       - name: Inject version into Cargo.toml
         shell: pwsh
         run: |

@@ -47,10 +47,27 @@ pub fn detect_from_model_name(model: &str) -> DiskType {
 
     let nvme_keywords = ["NVME", "PCIE", "980", "970", "960", "SN"];
     let ssd_keywords = [
-        "SSD", "SOLID STATE", "M.2", "MSATA", "FLASH", "NAND",
-        "EVO", "PRO", "MX", "BX", "SHGS",
+        "SSD",
+        "SOLID STATE",
+        "M.2",
+        "MSATA",
+        "FLASH",
+        "NAND",
+        "EVO",
+        "PRO",
+        "MX",
+        "BX",
+        "SHGS",
     ];
-    let hdd_keywords = ["HDD", "HARDDISK", "7200", "5400", "RPM", "WD BLUE", "BARRACUDA"];
+    let hdd_keywords = [
+        "HDD",
+        "HARDDISK",
+        "7200",
+        "5400",
+        "RPM",
+        "WD BLUE",
+        "BARRACUDA",
+    ];
 
     if nvme_keywords.iter().any(|k| model_upper.contains(k)) {
         return DiskType::SsdNvme;

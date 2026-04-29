@@ -45,6 +45,16 @@ struct PlannedDisableChange {
     before: String,
 }
 
+#[derive(Debug)]
+enum FeatureDisableOutcome {
+    /// Feature was actively disabled (exit 0 or 3010 reboot-required).
+    Disabled,
+    /// Feature was already off or not applicable on this Windows edition — treat as no-op.
+    AlreadyOrNA,
+    /// DISM reported a genuine error unrelated to applicability.
+    Failed(String),
+}
+
 /// 비활성화 실행
 ///
 /// - `options`: None이면 전체 실행, Some이면 가상화 점검 결과 기반 선택 실행
@@ -408,16 +418,53 @@ fn append_registry_backup_entries(
     }
 }
 
+/// Classify a DISM /disable-feature result into one of three outcomes.
+///
+/// DISM returns exit 0 for both "disabled now" and "already disabled", so a
+/// non-zero exit is always either a genuine error or a "feature not applicable
+/// on this edition" signal (indicated by specific stdout/stderr phrases).
+/// Exit 3010 means "disabled, reboot required" and is treated as success.
+fn classify_feature_disable(r: &process_service::ProcessResult) -> FeatureDisableOutcome {
+    if r.success || r.exit_code == 3010 {
+        return FeatureDisableOutcome::Disabled;
+    }
+    let combined = format!("{} {}", r.stdout, r.stderr).to_ascii_lowercase();
+    let mentions_feature_name =
+        combined.contains("feature name") || combined.contains("featurename");
+    if combined.contains("already disabled")
+        || combined.contains("not enabled")
+        || (mentions_feature_name
+            && (combined.contains("is unknown")
+                || combined.contains("not recognized")
+                || combined.contains("not available")))
+    {
+        return FeatureDisableOutcome::AlreadyOrNA;
+    }
+    let err = if !r.stderr.trim().is_empty() {
+        r.stderr.trim().to_string()
+    } else if !r.stdout.trim().is_empty() {
+        r.stdout.trim().to_string()
+    } else {
+        format!("exit {}", r.exit_code)
+    };
+    FeatureDisableOutcome::Failed(err)
+}
+
 fn disable_hyperv() -> DisableResult {
     let mut messages = Vec::new();
     let mut all_success = true;
 
     for feature in HYPERV_FEATURES {
         let r = process_service::disable_feature(feature);
-        if r.success {
-            messages.push(format!("✓ {feature}"));
-        } else {
-            messages.push(format!("- {feature} (이미 비활성화됨)"));
+        match classify_feature_disable(&r) {
+            FeatureDisableOutcome::Disabled => messages.push(format!("✓ {feature}")),
+            FeatureDisableOutcome::AlreadyOrNA => {
+                messages.push(format!("- {feature} (이미 비활성화됨 또는 해당 없음)"));
+            }
+            FeatureDisableOutcome::Failed(err) => {
+                messages.push(format!("✗ {feature}: {err}"));
+                all_success = false;
+            }
         }
     }
 
@@ -445,19 +492,25 @@ fn disable_hyperv() -> DisableResult {
 
 fn disable_wsl() -> DisableResult {
     let mut messages = Vec::new();
+    let mut all_success = true;
 
     for feature in WSL_FEATURES {
         let r = process_service::disable_feature(feature);
-        messages.push(if r.success {
-            format!("✓ {feature}")
-        } else {
-            format!("- {feature} (이미 비활성화됨)")
-        });
+        match classify_feature_disable(&r) {
+            FeatureDisableOutcome::Disabled => messages.push(format!("✓ {feature}")),
+            FeatureDisableOutcome::AlreadyOrNA => {
+                messages.push(format!("- {feature} (이미 비활성화됨 또는 해당 없음)"));
+            }
+            FeatureDisableOutcome::Failed(err) => {
+                messages.push(format!("✗ {feature}: {err}"));
+                all_success = false;
+            }
+        }
     }
 
     DisableResult {
         task: "WSL 비활성화".to_string(),
-        success: true,
+        success: all_success,
         message: messages.join("\n"),
     }
 }
@@ -539,5 +592,143 @@ pub fn request_reboot() -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("재부팅 명령 실패: {}", result.stderr))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::process_service::ProcessResult;
+
+    fn make_result(success: bool, exit_code: i32, stdout: &str, stderr: &str) -> ProcessResult {
+        ProcessResult {
+            success,
+            exit_code,
+            stdout: stdout.to_string(),
+            stderr: stderr.to_string(),
+        }
+    }
+
+    #[test]
+    fn exit_zero_is_disabled() {
+        let r = make_result(true, 0, "The operation completed successfully.", "");
+        assert!(matches!(
+            classify_feature_disable(&r),
+            FeatureDisableOutcome::Disabled
+        ));
+    }
+
+    #[test]
+    fn exit_3010_reboot_required_is_disabled() {
+        let r = make_result(false, 3010, "A restart is required.", "");
+        assert!(matches!(
+            classify_feature_disable(&r),
+            FeatureDisableOutcome::Disabled
+        ));
+    }
+
+    #[test]
+    fn already_disabled_phrase_in_stdout_is_na() {
+        let r = make_result(false, 1, "Feature already disabled.", "");
+        assert!(matches!(
+            classify_feature_disable(&r),
+            FeatureDisableOutcome::AlreadyOrNA
+        ));
+    }
+
+    #[test]
+    fn not_enabled_phrase_in_stderr_is_na() {
+        let r = make_result(false, 1, "", "The feature is not enabled.");
+        assert!(matches!(
+            classify_feature_disable(&r),
+            FeatureDisableOutcome::AlreadyOrNA
+        ));
+    }
+
+    #[test]
+    fn feature_name_unknown_is_na() {
+        let r = make_result(
+            false,
+            1,
+            "Feature name Microsoft-Hyper-V-All is unknown.",
+            "",
+        );
+        assert!(matches!(
+            classify_feature_disable(&r),
+            FeatureDisableOutcome::AlreadyOrNA
+        ));
+    }
+
+    #[test]
+    fn not_recognized_in_stderr_is_na() {
+        let r = make_result(false, 1, "", "Feature name is not recognized.");
+        assert!(matches!(
+            classify_feature_disable(&r),
+            FeatureDisableOutcome::AlreadyOrNA
+        ));
+    }
+
+    #[test]
+    fn feature_not_available_is_na() {
+        let r = make_result(
+            false,
+            1,
+            "Feature name Microsoft-Hyper-V-All is not available in this image.",
+            "",
+        );
+        assert!(matches!(
+            classify_feature_disable(&r),
+            FeatureDisableOutcome::AlreadyOrNA
+        ));
+    }
+
+    #[test]
+    fn invalid_feature_state_is_real_failure() {
+        let r = make_result(
+            false,
+            1,
+            "",
+            "Feature name Microsoft-Hyper-V-All failed because the component store is in an invalid state.",
+        );
+        match classify_feature_disable(&r) {
+            FeatureDisableOutcome::Failed(msg) => assert!(msg.contains("invalid state")),
+            other => panic!("Expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn generic_unknown_error_is_real_failure() {
+        let r = make_result(false, 1, "", "Unknown DISM error.");
+        match classify_feature_disable(&r) {
+            FeatureDisableOutcome::Failed(msg) => assert!(msg.contains("Unknown DISM error")),
+            other => panic!("Expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn elevation_required_is_real_failure() {
+        let r = make_result(false, 740, "", "Elevation required.");
+        match classify_feature_disable(&r) {
+            FeatureDisableOutcome::Failed(msg) => assert!(msg.contains("Elevation required")),
+            other => panic!("Expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn generic_error_with_no_message_reports_exit_code() {
+        let r = make_result(false, 42, "", "");
+        match classify_feature_disable(&r) {
+            FeatureDisableOutcome::Failed(msg) => assert!(msg.contains("42")),
+            other => panic!("Expected Failed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn dism_error_non_na_uses_stderr_over_stdout() {
+        let r = make_result(false, 1, "some stdout", "critical dism error");
+        match classify_feature_disable(&r) {
+            FeatureDisableOutcome::Failed(msg) => assert_eq!(msg, "critical dism error"),
+            other => panic!("Expected Failed, got {other:?}"),
+        }
     }
 }

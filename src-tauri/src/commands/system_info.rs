@@ -2,7 +2,6 @@
 ///
 /// 프론트엔드에서 invoke("get_system_info") 로 호출
 /// WMI + Registry 양쪽 수집
-
 use crate::models::system_info::SystemInfoItem;
 use crate::services::{event_log_service, registry_service::windows as reg};
 use tauri::AppHandle;
@@ -50,16 +49,36 @@ fn collect_all_system_info() -> anyhow::Result<Vec<SystemInfoItem>> {
 fn collect_os_info(items: &mut Vec<SystemInfoItem>) {
     let info = reg::get_windows_version();
     items.push(SystemInfoItem::new("운영체제", "이름", &info.os_name));
-    items.push(SystemInfoItem::new("운영체제", "버전", &info.display_version));
+    items.push(SystemInfoItem::new(
+        "운영체제",
+        "버전",
+        &info.display_version,
+    ));
     items.push(SystemInfoItem::new(
         "운영체제",
         "빌드",
         &format!("{}.{}", info.build_number, info.ubr),
     ));
-    items.push(SystemInfoItem::new("운영체제", "에디션", &info.product_name));
-    items.push(SystemInfoItem::new("운영체제", "아키텍처", &info.architecture));
-    items.push(SystemInfoItem::new("운영체제", "설치 날짜", &info.install_date));
-    items.push(SystemInfoItem::new("운영체제", "설치 언어", &info.install_language));
+    items.push(SystemInfoItem::new(
+        "운영체제",
+        "에디션",
+        &info.product_name,
+    ));
+    items.push(SystemInfoItem::new(
+        "운영체제",
+        "아키텍처",
+        &info.architecture,
+    ));
+    items.push(SystemInfoItem::new(
+        "운영체제",
+        "설치 날짜",
+        &info.install_date,
+    ));
+    items.push(SystemInfoItem::new(
+        "운영체제",
+        "설치 언어",
+        &info.install_language,
+    ));
 }
 
 // ── CPU 정보 (WMI) ─────────────────────────────────────────────────────────
@@ -166,7 +185,11 @@ fn collect_disk_info(items: &mut Vec<SystemInfoItem>) {
     let physical_disks = wmi::get_msft_physical_disks().unwrap_or_default();
 
     if drives.is_empty() {
-        items.push(SystemInfoItem::new("디스크", "상태", "디스크를 찾을 수 없습니다"));
+        items.push(SystemInfoItem::new(
+            "디스크",
+            "상태",
+            "디스크를 찾을 수 없습니다",
+        ));
         return;
     }
 
@@ -194,12 +217,10 @@ fn collect_disk_info(items: &mut Vec<SystemInfoItem>) {
             disk_service::DiskType::Usb
         } else {
             // MSFT_PhysicalDisk 인덱스 대응 → MediaType=0(Unknown)이면 모델명 키워드 폴백
-            let from_wmi = physical_disks
-                .get(i)
-                .and_then(|pd| {
-                    pd.media_type
-                        .map(|mt| disk_service::media_type_to_disk_type(mt, pd.bus_type))
-                });
+            let from_wmi = physical_disks.get(i).and_then(|pd| {
+                pd.media_type
+                    .map(|mt| disk_service::media_type_to_disk_type(mt, pd.bus_type))
+            });
             match from_wmi {
                 Some(t) if t != disk_service::DiskType::Unknown => t,
                 _ => disk_service::detect_from_model_name(&drive.model),
@@ -254,7 +275,11 @@ fn collect_motherboard_info(items: &mut Vec<SystemInfoItem>) {
     match wmi::get_baseboard_info() {
         Ok(boards) => {
             if let Some(board) = boards.into_iter().next() {
-                items.push(SystemInfoItem::new("메인보드", "제조사", &board.manufacturer));
+                items.push(SystemInfoItem::new(
+                    "메인보드",
+                    "제조사",
+                    &board.manufacturer,
+                ));
                 items.push(SystemInfoItem::new("메인보드", "모델", &board.product));
                 if let Some(sn) = &board.serial_number {
                     let sn = sn.trim();
@@ -325,7 +350,11 @@ fn collect_power_info(items: &mut Vec<SystemInfoItem>) {
     match wmi::get_power_plans() {
         Ok(plans) => {
             if plans.is_empty() {
-                items.push(SystemInfoItem::new("전원", "상태", "전원 계획을 찾을 수 없습니다"));
+                items.push(SystemInfoItem::new(
+                    "전원",
+                    "상태",
+                    "전원 계획을 찾을 수 없습니다",
+                ));
                 return;
             }
 
@@ -349,7 +378,11 @@ fn collect_power_info(items: &mut Vec<SystemInfoItem>) {
                     }
                 })
                 .collect();
-            items.push(SystemInfoItem::new("전원", "등록된 전원 계획", &all.join(", ")));
+            items.push(SystemInfoItem::new(
+                "전원",
+                "등록된 전원 계획",
+                &all.join(", "),
+            ));
         }
         Err(e) => items.push(SystemInfoItem::error("전원", &e.to_string())),
     }
@@ -427,7 +460,10 @@ try {
 
 #[cfg(not(windows))]
 fn collect_windows_update_info(items: &mut Vec<SystemInfoItem>) {
-    items.push(SystemInfoItem::error("Windows 업데이트", "Windows 전용 기능"));
+    items.push(SystemInfoItem::error(
+        "Windows 업데이트",
+        "Windows 전용 기능",
+    ));
 }
 
 // ── 보안/DRM 후킹 모듈 호환성 점검 ────────────────────────────────────────
@@ -538,11 +574,7 @@ foreach ($path in $paths) {
     }
 
     if !found {
-        items.push(SystemInfoItem::new(
-            "보안 모듈",
-            "f_im.dll",
-            "미감지",
-        ));
+        items.push(SystemInfoItem::new("보안 모듈", "f_im.dll", "미감지"));
     }
 }
 
@@ -568,8 +600,7 @@ fn compute_uptime(boot_wmi: &str) -> String {
     if boot_wmi.len() < 14 {
         return "알 수 없음".to_string();
     }
-    let Ok(boot_dt) = chrono::NaiveDateTime::parse_from_str(&boot_wmi[..14], "%Y%m%d%H%M%S")
-    else {
+    let Ok(boot_dt) = chrono::NaiveDateTime::parse_from_str(&boot_wmi[..14], "%Y%m%d%H%M%S") else {
         return "알 수 없음".to_string();
     };
 
