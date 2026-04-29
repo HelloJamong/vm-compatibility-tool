@@ -5,6 +5,8 @@
     progressPercent: number;
     currentAction: string;
     actionSummaries: string[];
+    actionItemTotal: number;
+    skippedItems: string[];
     savedFilenames: string[];
     saveError: string | null;
     version: string;
@@ -19,6 +21,8 @@
     progressPercent,
     currentAction,
     actionSummaries,
+    actionItemTotal,
+    skippedItems,
     savedFilenames,
     saveError,
     version,
@@ -27,7 +31,7 @@
     onClose,
   }: Props = $props();
 
-  const canStartAction = $derived(complete && actionSummaries.length > 0 && !whfbDetected);
+  const canStartAction = $derived(complete && actionItemTotal > 0 && !whfbDetected);
 
   function issueTone(summary: string): "danger" | "warning" {
     return summary.includes("확인 불가") ? "warning" : "danger";
@@ -69,7 +73,7 @@
             </div>
             <p class="summary-message">{currentAction}</p>
           </section>
-        {:else if actionSummaries.length === 0}
+        {:else if actionItemTotal === 0}
           <section class="summary-card">
             <div class="summary-header">
               <span class="summary-title">점검 결과 요약</span>
@@ -89,7 +93,7 @@
           <section class="summary-card">
             <div class="summary-header">
               <span class="summary-title">점검 결과 요약</span>
-              <span class="summary-count">조치 대상 {actionSummaries.length}건 확인</span>
+              <span class="summary-count">조치 대상 {actionItemTotal}건 확인</span>
             </div>
             <div class="issue-list">
               {#each actionSummaries as summary}
@@ -99,6 +103,26 @@
                 </div>
               {/each}
             </div>
+          </section>
+        {/if}
+
+        {#if complete && skippedItems.length > 0}
+          <section class="summary-card summary-card--warning">
+            <div class="summary-header">
+              <span class="summary-title">건너뛴 점검 항목</span>
+              <span class="summary-count summary-count--warning">{skippedItems.length}건 미수집</span>
+            </div>
+            <div class="issue-list">
+              {#each skippedItems.slice(0, 4) as item}
+                <div class="issue-item">
+                  <span class="issue-dot warning">!</span>
+                  <span>{item}</span>
+                </div>
+              {/each}
+            </div>
+            {#if skippedItems.length > 4}
+              <p class="summary-message">외 {skippedItems.length - 4}건은 CSV에서 확인하세요.</p>
+            {/if}
           </section>
         {/if}
 
@@ -242,6 +266,10 @@
     color: #2f67ea;
   }
 
+  .summary-count--warning {
+    color: #f2a316;
+  }
+
   .summary-message {
     margin: 0;
     font-size: 13px;
@@ -257,6 +285,11 @@
 
   .summary-message--error {
     color: #ef4b4b;
+  }
+
+  .summary-card--warning {
+    border-color: #f8d48a;
+    background: #fffbeb;
   }
 
   .progress-track {

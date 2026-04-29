@@ -39,6 +39,7 @@ fn collect_all_system_info() -> anyhow::Result<Vec<SystemInfoItem>> {
     collect_gpu_info(&mut items);
     collect_power_info(&mut items);
     collect_windows_update_info(&mut items);
+    collect_security_hook_info(&mut items);
     event_log_service::collect_event_log_info(&mut items);
 
     Ok(items)
@@ -427,6 +428,127 @@ try {
 #[cfg(not(windows))]
 fn collect_windows_update_info(items: &mut Vec<SystemInfoItem>) {
     items.push(SystemInfoItem::error("Windows 업데이트", "Windows 전용 기능"));
+}
+
+// ── 보안/DRM 후킹 모듈 호환성 점검 ────────────────────────────────────────
+
+#[cfg(windows)]
+fn collect_security_hook_info(items: &mut Vec<SystemInfoItem>) {
+    use crate::services::process_service;
+
+    let script = r#"
+$paths = @(
+    "$env:WINDIR\System32\f_im.dll",
+    "$env:WINDIR\SysWOW64\f_im.dll"
+)
+
+foreach ($path in $paths) {
+    if (-not (Test-Path -LiteralPath $path)) {
+        continue
+    }
+
+    try {
+        $file = Get-Item -LiteralPath $path
+        $version = $file.VersionInfo
+        $signature = Get-AuthenticodeSignature -LiteralPath $path
+
+        $company = if ($version.CompanyName) { $version.CompanyName } else { "" }
+        $product = if ($version.ProductName) { $version.ProductName } else { "" }
+        $fileVersion = if ($version.FileVersion) { $version.FileVersion } else { "" }
+        $sigStatus = if ($signature.Status) { $signature.Status.ToString() } else { "Unknown" }
+        $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { "" }
+
+        "$path`t$company`t$product`t$fileVersion`t$sigStatus`t$signer" | Write-Output
+    } catch {
+        "$path`t`t`t`tCheckFailed`t$($_.Exception.Message)" | Write-Output
+    }
+}
+"#;
+
+    let result = process_service::run_powershell(script);
+    if !result.success && result.stdout.trim().is_empty() {
+        let msg = result.stderr.trim();
+        items.push(SystemInfoItem::error(
+            "보안 모듈",
+            if msg.is_empty() {
+                "f_im.dll 점검 실패"
+            } else {
+                msg
+            },
+        ));
+        return;
+    }
+
+    let mut found = false;
+    for line in result.stdout.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let mut parts = line.split('\t');
+        let path = parts.next().unwrap_or("").trim();
+        let company = parts.next().unwrap_or("").trim();
+        let product = parts.next().unwrap_or("").trim();
+        let file_version = parts.next().unwrap_or("").trim();
+        let signature_status = parts.next().unwrap_or("").trim();
+        let signer = parts.next().unwrap_or("").trim();
+
+        found = true;
+        let location = if path.to_ascii_lowercase().contains("\\syswow64\\") {
+            "SysWOW64"
+        } else {
+            "System32"
+        };
+        let mut details = Vec::new();
+        if !company.is_empty() {
+            details.push(format!("회사: {company}"));
+        }
+        if !product.is_empty() {
+            details.push(format!("제품: {product}"));
+        }
+        if !file_version.is_empty() {
+            details.push(format!("버전: {file_version}"));
+        }
+        details.push(format!(
+            "서명: {}",
+            if signature_status.is_empty() {
+                "Unknown"
+            } else {
+                signature_status
+            }
+        ));
+        if !signer.is_empty() {
+            details.push(format!("서명자: {signer}"));
+        }
+
+        items.push(SystemInfoItem::new(
+            "보안 모듈",
+            &format!("f_im.dll ({location})"),
+            &details.join(" / "),
+        ));
+
+        if !matches!(signature_status, "Valid" | "") {
+            items.push(SystemInfoItem::new(
+                "보안 모듈 경고",
+                "f_im.dll",
+                "Fasoo DRM 계열 전역 후킹 모듈의 서명/상태 이상이 감지되었습니다. 실행 시 0xc0000428 Bad Image 오류가 뜨면 해당 보안 프로그램을 최신 버전으로 재설치하거나 제거 후 재부팅하세요.",
+            ));
+        }
+    }
+
+    if !found {
+        items.push(SystemInfoItem::new(
+            "보안 모듈",
+            "f_im.dll",
+            "미감지",
+        ));
+    }
+}
+
+#[cfg(not(windows))]
+fn collect_security_hook_info(items: &mut Vec<SystemInfoItem>) {
+    items.push(SystemInfoItem::error("보안 모듈", "Windows 전용 기능"));
 }
 
 // ── 유틸 함수 ──────────────────────────────────────────────────────────────

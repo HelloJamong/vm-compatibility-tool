@@ -54,6 +54,7 @@
   let inspectionProgress = $state(0);
   let inspectionStage = $state<InspectionStage>("idle");
   let inspectionActiveTask = $state<InspectionTask>("preparing");
+  let inspectionSkippedItems = $state<string[]>([]);
   let systemDone = $state(false);
   let virtDone = $state(false);
   let installedProgramsDone = $state(false);
@@ -147,7 +148,11 @@
   async function runInspectionStep(task: InspectionTask, action: () => Promise<void>) {
     inspectionActiveTask = task;
     inspectionCurrentAction = inspectionTaskProgress[task].label;
-    await action();
+    try {
+      await action();
+    } catch (e) {
+      markInspectionTaskSkipped(task, `${e}`);
+    }
     inspectionProgress = Math.max(inspectionProgress, inspectionTaskProgress[task].complete);
   }
 
@@ -161,6 +166,17 @@
       systemLoaded = true;
       systemDone = true;
     } catch (e) {
+      const message = `${e}`;
+      systemItems = [
+        {
+          category: "점검 실패",
+          item: "시스템 정보",
+          value: message,
+        },
+      ];
+      systemLoaded = true;
+      systemDone = false;
+      recordInspectionSkip("시스템 정보", message);
       status = `시스템 정보 오류: ${e}`;
     } finally {
       systemLoading = false;
@@ -177,6 +193,23 @@
       virtChecked = true;
       virtDone = true;
     } catch (e) {
+      const message = `${e}`;
+      virtItems = [
+        {
+          category: "가상화 점검",
+          status: "확인 불가",
+          details: message,
+          recommendation: "해당 항목은 건너뛰고 나머지 점검을 계속했습니다.",
+          disable_group: null,
+          source_type: "unknown",
+          action_required: false,
+          optional_action_available: false,
+          manifest_id: "virtualization_check_failed",
+        },
+      ];
+      virtChecked = true;
+      virtDone = false;
+      recordInspectionSkip("가상화 점검", message);
       status = `가상화 점검 오류: ${e}`;
     } finally {
       virtLoading = false;
@@ -193,9 +226,17 @@
       installedProgramsLoaded = true;
       installedProgramsDone = true;
     } catch (e) {
-      installedProgramItems = [];
+      const message = `${e}`;
+      installedProgramItems = [
+        {
+          name: "설치 프로그램 목록 수집 실패",
+          publisher: message,
+          install_date: "",
+        },
+      ];
       installedProgramsLoaded = true;
-      installedProgramsDone = true;
+      installedProgramsDone = false;
+      recordInspectionSkip("설치 프로그램 목록", message);
       status = `설치 프로그램 목록 오류: ${e}`;
     } finally {
       installedProgramsLoading = false;
@@ -505,13 +546,24 @@
   }
 
   function inspectionActionSummaries(items: VirtItem[]): string[] {
-    return items
-      .filter((item) => item.action_required && item.manifest_id !== "whfb_check")
+    const groupLabels: Record<DisableGroup, string> = {
+      hyperv: "Hyper-V 관련",
+      wsl: "WSL 관련",
+      vbs: "VBS 관련",
+      core_isolation: "코어 격리 관련",
+    };
+    const counts = new Map<DisableGroup, number>();
+
+    for (const item of items) {
+      if (!item.action_required || item.disable_group === null || item.manifest_id === "whfb_check") {
+        continue;
+      }
+      counts.set(item.disable_group, (counts.get(item.disable_group) ?? 0) + 1);
+    }
+
+    return Array.from(counts.entries())
       .slice(0, 4)
-      .map((item) => {
-        const detail = item.recommendation?.trim() || item.status;
-        return `${item.category}: ${detail}`;
-      });
+      .map(([group, count]) => `${groupLabels[group]} 조치 필요 항목 ${count}건`);
   }
 
   function startInspectionProgressTimer() {
@@ -544,6 +596,56 @@
       inspectionProgressTimer = null;
     }
   }
+
+  function recordInspectionSkip(label: string, message: string) {
+    const summary = `${label}: ${message || "알 수 없는 오류"}`;
+    if (!inspectionSkippedItems.includes(summary)) {
+      inspectionSkippedItems = [...inspectionSkippedItems, summary];
+    }
+  }
+
+  function markInspectionTaskSkipped(task: InspectionTask, message: string) {
+    if (task === "system") {
+      systemLoaded = true;
+      systemDone = false;
+      if (systemItems.length === 0) {
+        systemItems = [{ category: "점검 실패", item: "시스템 정보", value: message }];
+      }
+      recordInspectionSkip("시스템 정보", message);
+    } else if (task === "virtualization") {
+      virtChecked = true;
+      virtDone = false;
+      if (virtItems.length === 0) {
+        virtItems = [
+          {
+            category: "가상화 점검",
+            status: "확인 불가",
+            details: message,
+            recommendation: "해당 항목은 건너뛰고 나머지 점검을 계속했습니다.",
+            disable_group: null,
+            source_type: "unknown",
+            action_required: false,
+            optional_action_available: false,
+            manifest_id: "virtualization_check_failed",
+          },
+        ];
+      }
+      recordInspectionSkip("가상화 점검", message);
+    } else if (task === "installedPrograms") {
+      installedProgramsLoaded = true;
+      installedProgramsDone = false;
+      if (installedProgramItems.length === 0) {
+        installedProgramItems = [
+          {
+            name: "설치 프로그램 목록 수집 실패",
+            publisher: message,
+            install_date: "",
+          },
+        ];
+      }
+      recordInspectionSkip("설치 프로그램 목록", message);
+    }
+  }
 </script>
 
 {#if disableActionModalOpen}
@@ -573,6 +675,8 @@
     progressPercent={inspectionProgressPercent()}
     currentAction={inspectionCurrentAction}
     actionSummaries={inspectionActionSummaries(virtItems)}
+    actionItemTotal={actionItemCount(virtItems)}
+    skippedItems={inspectionSkippedItems}
     savedFilenames={[
       basename(inspectionSystemResultPath),
       basename(inspectionVirtResultPath),
