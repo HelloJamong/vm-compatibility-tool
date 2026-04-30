@@ -1,5 +1,26 @@
 # Changelog
 
+## [Release-v26.04.15] - 2026-04-30
+
+> 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.
+> `v26.04.15`는 2026년 4월의 15번째 정식 Release 버전을 의미한다.
+
+### 주요 변경사항 요약
+
+#### fix: 재부팅 취소 후 메인 화면 스타일 미적용 문제 수정
+- 진단 및 조치 완료 후 재부팅 확인에서 `아니오`를 선택하고 완료 화면의 `닫기`를 누르면 메인 화면 Tailwind 스타일이 적용되지 않던 문제 수정
+- Tailwind v4의 Vite 플러그인을 명시적으로 등록해 빌드 산출물에 utility CSS가 포함되도록 보정
+- 메인 화면의 카드, 버튼, 여백, 배경, 레이아웃 스타일이 정상적으로 복구되도록 개선
+
+#### 검증
+- `npm run build` 통과
+- `npm run check` 통과
+- `npm run verify:windows` 통과
+- `npm audit --audit-level=moderate` 기준 취약점 0건 확인
+- Rocky Linux 9.7 native Tauri `cargo check`는 시스템 GLib 2.68.4와 Linux native Tauri 요구 GLib 2.70+ 불일치로 예외 처리
+
+---
+
 ## [Release-v26.04.14] - 2026-04-29
 
 > 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.
