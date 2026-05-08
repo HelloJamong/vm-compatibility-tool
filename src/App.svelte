@@ -2,7 +2,6 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
-  import { save } from "@tauri-apps/plugin-dialog";
   import { onDestroy, onMount } from "svelte";
   import AppHeader from "./components/layout/AppHeader.svelte";
   import StatusBar from "./components/layout/StatusBar.svelte";
@@ -79,7 +78,9 @@
     vbs: false,
     core_isolation: false,
     optional_registry_ids: [],
+    skip_policy_keys: false,
   });
+  let rebootScheduled = $state(false);
   let progressValue = $state<number | null>(null);
   let inspectionProgressTimer: ReturnType<typeof setInterval> | null = null;
   const inspectionTaskProgress: Record<InspectionTask, { activeCap: number; complete: number; label: string }> = {
@@ -266,99 +267,6 @@
     status = "가상화 설정 점검 완료";
   }
 
-  async function exportSystemCsv() {
-    const path = await save({
-      filters: [{ name: "CSV 파일", extensions: ["csv"] }],
-      defaultPath: `SystemInfo-${new Date().toISOString().slice(0, 10)}.csv`,
-    });
-    if (!path) return;
-    try {
-      await invoke("export_csv", {
-        filePath: path,
-        dataType: "system",
-        systemItems,
-        virtItems: null,
-      });
-      status = "CSV 내보내기 완료";
-    } catch (e) {
-      status = `CSV 오류: ${e}`;
-    }
-  }
-
-  async function exportVirtCsv() {
-    const path = await save({
-      filters: [{ name: "CSV 파일", extensions: ["csv"] }],
-      defaultPath: `VirtCheck-${new Date().toISOString().slice(0, 10)}.csv`,
-    });
-    if (!path) return;
-    try {
-      await invoke("export_csv", {
-        filePath: path,
-        dataType: "virtualization",
-        systemItems: null,
-        virtItems,
-      });
-      status = "CSV 내보내기 완료";
-    } catch (e) {
-      status = `CSV 오류: ${e}`;
-    }
-  }
-
-  async function runDisable() {
-    disableRunning = true;
-    disableComplete = false;
-    disableLog = ["▶ 비활성화 작업을 시작합니다..."];
-    status = "비활성화 실행 중...";
-    progressValue = 0;
-
-    const unlisten = await listen<ProgressEvent>("disable-progress", (e) => {
-      const { step, total, message, success } = e.payload;
-      const icon = success ? "⏳" : "⚠️";
-      disableLog = [...disableLog, `  [${step}/${total}] ${icon} ${message}`];
-      progressValue = total > 0 ? step / total : null;
-    });
-
-    try {
-      const options: DisableOptions | null = virtChecked ? computeDisableOptions(virtItems) : null;
-      const output = await invoke<DisableOutput>("execute_disable", { options });
-      for (const result of output.results) {
-        disableLog = [
-          ...disableLog,
-          "",
-          `${result.success ? "✅" : "⚠️"} ${result.task}`,
-          result.message,
-        ];
-      }
-      disableLog = [
-        ...disableLog,
-        "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "✅ 모든 작업이 완료되었습니다.",
-        "변경 사항을 적용하려면 재부팅이 필요합니다.",
-      ];
-      if (output.log_path) {
-        disableLog = [...disableLog, `📄 로그: ${output.log_path}`];
-      }
-      if (output.backup_path) {
-        disableLog = [...disableLog, `💾 레지스트리 백업: ${output.backup_path}`];
-      }
-      if (output.change_csv_path) {
-        disableLog = [...disableLog, `📊 조치 전후 비교 CSV: ${output.change_csv_path}`];
-      }
-      status = output.log_path
-        ? `비활성화 완료 — 로그 저장됨`
-        : "비활성화 완료 — 재부팅 필요";
-      disableComplete = true;
-    } catch (e) {
-      disableLog = [...disableLog, `❌ 오류: ${e}`];
-      status = "오류 발생";
-    } finally {
-      disableRunning = false;
-      progressValue = null;
-      unlisten();
-    }
-  }
-
   function requestReboot() {
     rebootConfirmOpen = true;
   }
@@ -376,7 +284,8 @@
     try {
       await invoke("request_reboot");
       rebootConfirmOpen = false;
-      status = "재부팅 예약 완료";
+      rebootScheduled = true;
+      status = "재부팅 예약 완료 (5초 후) — 취소하려면 재부팅 취소 버튼을 누르세요";
     } catch (e) {
       status = `재부팅 오류: ${e}`;
     }
@@ -385,7 +294,7 @@
   function openDisableActionModal() {
     disableActionOptions = virtChecked
       ? computeDisableOptions(virtItems)
-      : { hyperv: true, wsl: true, vbs: true, core_isolation: true, optional_registry_ids: [] };
+      : { hyperv: true, wsl: true, vbs: true, core_isolation: true, optional_registry_ids: [], skip_policy_keys: false };
     disableActionStage = "warning";
     disableActionProgress = 0;
     disableActionCurrentAction = "";
@@ -445,9 +354,20 @@
   async function rebootNow() {
     try {
       await invoke("request_reboot");
-      status = "재부팅 예약 완료 (5초 후)";
+      rebootScheduled = true;
+      status = "재부팅 예약 완료 (5초 후) — 취소하려면 재부팅 취소 버튼을 누르세요";
     } catch (e) {
       status = `재부팅 오류: ${e}`;
+    }
+  }
+
+  async function cancelReboot() {
+    try {
+      await invoke("cancel_reboot");
+      rebootScheduled = false;
+      status = "재부팅 취소됨";
+    } catch (e) {
+      status = `재부팅 취소 오류: ${e}`;
     }
   }
 
@@ -458,6 +378,7 @@
       vbs: hasActionForGroup(items, "vbs"),
       core_isolation: hasActionForGroup(items, "core_isolation"),
       optional_registry_ids: [],
+      skip_policy_keys: hasOrgWarning(items),
     };
   }
 
@@ -661,11 +582,13 @@
     backupPath={disableActionBackupPath}
     changeCsvPath={disableActionChangeCsvPath}
     {version}
+    {rebootScheduled}
     onStart={startDisableAction}
     onToggleDisableOption={toggleDisableOption}
     onToggleOptionalRegistry={toggleOptionalRegistrySelection}
     onCancel={closeDisableActionModal}
     onRebootNow={rebootNow}
+    onCancelReboot={cancelReboot}
     onDismiss={closeDisableActionModal}
   />
 {:else if inspectionModalOpen}
@@ -709,7 +632,6 @@
           {systemLoading}
           {systemItems}
           onRefresh={refreshSystemInfo}
-          onExport={exportSystemCsv}
         />
       {:else if currentPanel === "virtualization"}
         <VirtualizationPanel
@@ -721,7 +643,6 @@
           healthyItemTotal={healthyItemCount(virtItems)}
           unknownItemTotal={unknownItemCount(virtItems)}
           onReload={loadVirtStatus}
-          onExport={exportVirtCsv}
           onShowDisable={() => showPanel("disable")}
         />
       {:else if currentPanel === "disable"}
@@ -735,8 +656,10 @@
           optionalCandidateCount={optionalRegistryCandidates(virtItems).length}
           whfbDetected={hasWhfbWarning(virtItems)}
           orgWarningDetected={hasOrgWarning(virtItems)}
+          {rebootScheduled}
           onRunDisable={openDisableActionModal}
           onRequestReboot={requestReboot}
+          onCancelReboot={cancelReboot}
           onLoadVirtStatus={loadVirtStatus}
           {logLineClass}
         />

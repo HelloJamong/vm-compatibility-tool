@@ -66,12 +66,12 @@ const MANIFEST: &[RegistryManifestEntry] = &[
         id: "vbs.locked",
         path: r"SYSTEM\CurrentControlSet\Control\DeviceGuard",
         value_name: "Locked",
-        target_value: Some(0),
+        target_value: None,
         disable_group: DisableGroup::Vbs,
-        action: RegistryAction::DisableWrite,
-        hive_set: RegistryHiveSet::CurrentAndControlSet001,
-        label: "VBS 잠금",
-        rationale: "DeviceGuard 잠금 상태 해제",
+        action: RegistryAction::InspectOnly,
+        hive_set: RegistryHiveSet::CurrentOnly,
+        label: "VBS UEFI 잠금 (Locked)",
+        rationale: "UEFI 잠금 상태 표시값 — 레지스트리 쓰기로 실제 UEFI 잠금이 해제되지 않아 점검 전용으로 변경",
     },
     RegistryManifestEntry {
         id: "vbs.mandatory",
@@ -211,10 +211,10 @@ const MANIFEST: &[RegistryManifestEntry] = &[
         value_name: "VulnerableDriverBlocklistEnable",
         target_value: Some(0),
         disable_group: DisableGroup::CoreIsolation,
-        action: RegistryAction::DisableWrite,
+        action: RegistryAction::ExcludedLegacy,
         hive_set: RegistryHiveSet::CurrentOnly,
-        label: "취약 드라이버 차단",
-        rationale: "코어 격리 관련 차단 정책 해제",
+        label: "취약 드라이버 차단 목록",
+        rationale: "HVCI와 독립적인 BYOVD 방어 메커니즘 — VM 호환성에 불필요하며 비활성화 시 보안 위험이 있어 선택 조치로 보류",
     },
     RegistryManifestEntry {
         id: "vbs.lsa_run_as_ppl",
@@ -415,5 +415,28 @@ mod tests {
         assert!(!entries
             .iter()
             .any(|entry| entry.id == "legacy.secure_biometrics_enabled"));
+    }
+
+    #[test]
+    fn vulnerable_driver_blocklist_is_excluded_from_core_isolation_disable_write() {
+        let entries = disable_write_entries(DisableGroup::CoreIsolation);
+        assert!(
+            !entries
+                .iter()
+                .any(|e| e.id == "core_isolation.vulnerable_driver_blocklist"),
+            "VulnerableDriverBlocklistEnable은 BYOVD 방어 메커니즘이므로 기본 조치에서 제외되어야 합니다"
+        );
+    }
+
+    #[test]
+    fn vulnerable_driver_blocklist_is_selectable_as_optional() {
+        let entries =
+            selected_optional_entries(&["core_isolation.vulnerable_driver_blocklist".to_string()]);
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.id == "core_isolation.vulnerable_driver_blocklist"),
+            "VulnerableDriverBlocklistEnable은 선택적 조치로 여전히 선택 가능해야 합니다"
+        );
     }
 }

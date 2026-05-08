@@ -5,14 +5,12 @@
     systemLoading: boolean;
     systemItems: SystemInfoItem[];
     onRefresh: () => void;
-    onExport: () => void;
   };
 
   let {
     systemLoading,
     systemItems,
     onRefresh,
-    onExport,
   }: Props = $props();
 </script>
 
@@ -38,14 +36,7 @@
         <p class="text-2xl">✅</p>
         <p class="text-sm font-semibold text-green-800">시스템 정보 수집 완료</p>
         <p class="text-xs text-green-700">총 {systemItems.length}개 항목 수집됨</p>
-        <p class="text-[11px] text-gray-500 mt-1">상세 내용은 CSV로 내보내기하여 확인하세요.</p>
-        <button
-          onclick={onExport}
-          disabled={systemLoading || systemItems.length === 0}
-          class="mt-2 px-4 py-2 text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg transition-colors font-semibold"
-        >
-          CSV 내보내기
-        </button>
+        <p class="text-[11px] text-gray-500 mt-1">상세 내용은 자동 저장된 CSV 파일에서 확인하세요.</p>
       </div>
     </div>
   {/if}

@@ -181,6 +181,8 @@ fn write_reg_backup(
         format!("; 생성: {}", now.format("%Y-%m-%d %H:%M:%S")),
         format!("; 컴퓨터: {}", computer_name()),
         format!("; 이 파일을 실행하면 변경 전 값으로 복원됩니다."),
+        format!("; 주의: 조치 전 원본 값이 없던 항목(주석 처리된 항목)은 복원되지 않습니다."),
+        format!(";       해당 항목을 완전히 제거하려면 레지스트리 편집기에서 직접 삭제하세요."),
         String::new(),
     ];
 

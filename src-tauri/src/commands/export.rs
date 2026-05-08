@@ -16,51 +16,6 @@ pub struct InspectionExportOutput {
 }
 
 #[tauri::command]
-pub async fn export_csv(
-    file_path: String,
-    data_type: String,
-    system_items: Option<Vec<SystemInfoItem>>,
-    virt_items: Option<Vec<VirtualizationItem>>,
-    installed_program_items: Option<Vec<InstalledProgramItem>>,
-) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || {
-        write_csv(
-            &file_path,
-            &data_type,
-            system_items,
-            virt_items,
-            installed_program_items,
-        )
-    })
-    .await
-    .map_err(|e| format!("작업 오류: {e}"))?
-    .map_err(|e: anyhow::Error| e.to_string())
-}
-
-#[tauri::command]
-pub async fn export_csv_auto(
-    data_type: String,
-    system_items: Option<Vec<SystemInfoItem>>,
-    virt_items: Option<Vec<VirtualizationItem>>,
-    installed_program_items: Option<Vec<InstalledProgramItem>>,
-) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || {
-        let path = build_auto_csv_path(&data_type)?;
-        write_csv(
-            path.to_string_lossy().as_ref(),
-            &data_type,
-            system_items,
-            virt_items,
-            installed_program_items,
-        )?;
-        Ok(path.to_string_lossy().into_owned())
-    })
-    .await
-    .map_err(|e| format!("작업 오류: {e}"))?
-    .map_err(|e: anyhow::Error| e.to_string())
-}
-
-#[tauri::command]
 pub async fn export_inspection_csvs_auto(
     system_items: Vec<SystemInfoItem>,
     virt_items: Vec<VirtualizationItem>,

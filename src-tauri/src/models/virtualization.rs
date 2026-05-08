@@ -122,6 +122,10 @@ pub struct DisableOptions {
     pub vbs: bool,
     pub core_isolation: bool,
     pub optional_registry_ids: Vec<String>,
+    /// true이면 SOFTWARE\Policies\ 경로 레지스트리 항목을 건너뜁니다.
+    /// 조직 관리 기기에서 GPO 재적용으로 복구될 수 있는 정책 경로 쓰기를 방지합니다.
+    #[serde(default)]
+    pub skip_policy_keys: bool,
 }
 
 impl DisableOptions {
@@ -132,6 +136,7 @@ impl DisableOptions {
             vbs: true,
             core_isolation: true,
             optional_registry_ids: Vec::new(),
+            skip_policy_keys: false,
         }
     }
 }

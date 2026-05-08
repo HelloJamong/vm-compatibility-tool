@@ -12,7 +12,6 @@
     healthyItemTotal: number;
     unknownItemTotal: number;
     onReload: () => void;
-    onExport: () => void;
     onShowDisable: () => void;
   };
 
@@ -25,7 +24,6 @@
     healthyItemTotal,
     unknownItemTotal,
     onReload,
-    onExport,
     onShowDisable,
   }: Props = $props();
 
@@ -37,22 +35,13 @@
 <div class="flex flex-col gap-2.5 h-full">
   <div class="flex items-center justify-between shrink-0">
     <h2 class="text-base font-bold text-gray-800">가상화 설정 점검</h2>
-    <div class="flex gap-2">
-      <button
-        onclick={onReload}
-        disabled={virtLoading}
-        class="px-3 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 disabled:opacity-50 rounded-lg transition-colors"
-      >
-        재점검
-      </button>
-      <button
-        onclick={onExport}
-        disabled={virtLoading || virtItems.length === 0}
-        class="px-3 py-1.5 text-xs bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white rounded-lg transition-colors"
-      >
-        CSV 내보내기
-      </button>
-    </div>
+    <button
+      onclick={onReload}
+      disabled={virtLoading}
+      class="px-3 py-1.5 text-xs bg-gray-200 hover:bg-gray-300 disabled:opacity-50 rounded-lg transition-colors"
+    >
+      재점검
+    </button>
   </div>
 
   {#if virtLoading && virtItems.length === 0}
@@ -106,7 +95,7 @@
             </tbody>
           </table>
         </div>
-        <p class="mt-2 text-[11px] text-gray-400 text-right">전체 점검 결과는 CSV 내보내기로 확인하세요.</p>
+        <p class="mt-2 text-[11px] text-gray-400 text-right">전체 점검 결과는 자동 저장된 CSV 파일에서 확인하세요.</p>
       {/if}
     </div>
 

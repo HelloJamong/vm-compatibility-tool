@@ -78,17 +78,8 @@ pub fn get_hypervisor_launch_type() -> String {
     match result {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            // "hypervisorlaunchtype     Auto" 또는 "Off" 파싱
-            for line in stdout.lines() {
-                let lower = line.to_lowercase();
-                if lower.contains("hypervisorlaunchtype") {
-                    let parts: Vec<&str> = line.splitn(2, ' ').collect();
-                    if parts.len() == 2 {
-                        return parts[1].trim().to_string();
-                    }
-                }
-            }
-            "확인 불가".to_string()
+            parse_bcdedit_value(&stdout, "hypervisorlaunchtype")
+                .unwrap_or_else(|| "확인 불가".to_string())
         }
         Err(e) => format!("오류: {}", e),
     }
@@ -114,18 +105,27 @@ pub fn get_vsm_launch_type() -> String {
     match result {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            for line in stdout.lines() {
-                if line.to_lowercase().contains("vsmlaunchtype") {
-                    let parts: Vec<&str> = line.splitn(2, ' ').collect();
-                    if parts.len() == 2 {
-                        return parts[1].trim().to_string();
-                    }
-                }
-            }
-            "미설정".to_string()
+            parse_bcdedit_value(&stdout, "vsmlaunchtype")
+                .unwrap_or_else(|| "미설정".to_string())
         }
         Err(e) => format!("오류: {}", e),
     }
+}
+
+/// bcdedit /enum 출력에서 특정 키의 값을 파싱합니다.
+/// 키·값 사이에 여러 공백/탭이 있을 수 있으므로 split_whitespace로 처리합니다.
+fn parse_bcdedit_value(output: &str, key: &str) -> Option<String> {
+    let key_lower = key.to_lowercase();
+    for line in output.lines() {
+        let lower = line.to_lowercase();
+        if lower.contains(&key_lower) {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            if tokens.len() >= 2 {
+                return Some(tokens[1..].join(" "));
+            }
+        }
+    }
+    None
 }
 
 /// PowerShell 스크립트 실행
@@ -171,6 +171,16 @@ pub fn schedule_reboot() -> ProcessResult {
         .unwrap_or_else(|e| ProcessResult::error(&e.to_string()))
 }
 
+/// 예약된 재부팅 취소
+pub fn cancel_reboot() -> ProcessResult {
+    Command::new("shutdown.exe")
+        .args(["/a"])
+        .creation_flags_no_window()
+        .output()
+        .map(ProcessResult::from_output)
+        .unwrap_or_else(|e| ProcessResult::error(&e.to_string()))
+}
+
 // Windows에서 콘솔 창 숨기기 위한 트레이트 확장
 trait CommandExt {
     fn creation_flags_no_window(&mut self) -> &mut Self;
@@ -190,7 +200,7 @@ impl CommandExt for Command {
 
 #[cfg(test)]
 mod tests {
-    use super::wrap_powershell_script;
+    use super::{parse_bcdedit_value, wrap_powershell_script};
 
     #[test]
     fn powershell_wrapper_forces_utf8_io() {
@@ -200,5 +210,38 @@ mod tests {
         assert!(wrapped.contains("[Console]::OutputEncoding"));
         assert!(wrapped.contains("$OutputEncoding"));
         assert!(wrapped.contains("Write-Output 'ok'"));
+    }
+
+    #[test]
+    fn bcdedit_parses_multi_space_separated_value() {
+        let output = "Windows Boot Loader\n-------------------\nhypervisorlaunchtype    Auto\n";
+        assert_eq!(
+            parse_bcdedit_value(output, "hypervisorlaunchtype"),
+            Some("Auto".to_string())
+        );
+    }
+
+    #[test]
+    fn bcdedit_parses_tab_separated_value() {
+        let output = "hypervisorlaunchtype\tOff\n";
+        assert_eq!(
+            parse_bcdedit_value(output, "hypervisorlaunchtype"),
+            Some("Off".to_string())
+        );
+    }
+
+    #[test]
+    fn bcdedit_returns_none_when_key_absent() {
+        let output = "identifier    {current}\ndevice    partition=C:\n";
+        assert_eq!(parse_bcdedit_value(output, "vsmlaunchtype"), None);
+    }
+
+    #[test]
+    fn bcdedit_parses_vsm_launch_type() {
+        let output = "vsmlaunchtype    Auto\n";
+        assert_eq!(
+            parse_bcdedit_value(output, "vsmlaunchtype"),
+            Some("Auto".to_string())
+        );
     }
 }

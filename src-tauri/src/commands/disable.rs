@@ -90,12 +90,19 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
         tasks.push(("WSL 비활성화".to_string(), Box::new(disable_wsl)));
     }
     if opts.vbs {
-        tasks.push(("VBS 레지스트리 비활성화".to_string(), Box::new(disable_vbs)));
+        let skip = opts.skip_policy_keys;
+        tasks.push((
+            "VBS 레지스트리 비활성화".to_string(),
+            Box::new(move || disable_registry_group(DisableGroup::Vbs, "VBS 비활성화", skip)),
+        ));
     }
     if opts.core_isolation {
+        let skip = opts.skip_policy_keys;
         tasks.push((
             "코어 격리 비활성화".to_string(),
-            Box::new(disable_core_isolation),
+            Box::new(move || {
+                disable_registry_group(DisableGroup::CoreIsolation, "코어 격리 비활성화", skip)
+            }),
         ));
     }
     if !opts.optional_registry_ids.is_empty() {
@@ -515,16 +522,29 @@ fn disable_wsl() -> DisableResult {
     }
 }
 
-fn disable_vbs() -> DisableResult {
-    disable_registry_group(DisableGroup::Vbs, "VBS 비활성화")
-}
+fn disable_registry_group(group: DisableGroup, task_name: &str, skip_policy_keys: bool) -> DisableResult {
+    let all_entries = registry_manifest::disable_write_entries(group);
 
-fn disable_core_isolation() -> DisableResult {
-    disable_registry_group(DisableGroup::CoreIsolation, "코어 격리 비활성화")
-}
+    let (skipped, entries): (Vec<_>, Vec<_>) = if skip_policy_keys {
+        all_entries
+            .into_iter()
+            .partition(|e| e.path.starts_with(r"SOFTWARE\Policies\"))
+    } else {
+        (vec![], all_entries)
+    };
 
-fn disable_registry_group(group: DisableGroup, task_name: &str) -> DisableResult {
-    apply_registry_entries(task_name, registry_manifest::disable_write_entries(group))
+    let mut result = apply_registry_entries(task_name, entries);
+
+    if !skipped.is_empty() {
+        let skip_note = skipped
+            .iter()
+            .map(|e| format!("- {} — 정책 경로 건너뜀 (조직 기기 GPO 보호)", e.label))
+            .collect::<Vec<_>>()
+            .join("\n");
+        result.message = format!("{}\n{}", result.message, skip_note);
+    }
+
+    result
 }
 
 fn disable_optional_registry_entries(ids: &[String]) -> DisableResult {
@@ -592,6 +612,16 @@ pub fn request_reboot() -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("재부팅 명령 실패: {}", result.stderr))
+    }
+}
+
+#[tauri::command]
+pub fn cancel_reboot() -> Result<(), String> {
+    let result = process_service::cancel_reboot();
+    if result.success {
+        Ok(())
+    } else {
+        Err(format!("재부팅 취소 실패: {}", result.stderr))
     }
 }
 

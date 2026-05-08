@@ -33,4 +33,5 @@ export type DisableOptions = {
   vbs: boolean;
   core_isolation: boolean;
   optional_registry_ids: string[];
+  skip_policy_keys: boolean;
 };

@@ -12,8 +12,10 @@
     optionalCandidateCount: number;
     whfbDetected: boolean;
     orgWarningDetected: boolean;
+    rebootScheduled: boolean;
     onRunDisable: () => void;
     onRequestReboot: () => void;
+    onCancelReboot: () => void;
     onLoadVirtStatus: () => void;
     logLineClass: (line: string) => string;
   };
@@ -28,8 +30,10 @@
     optionalCandidateCount,
     whfbDetected,
     orgWarningDetected,
+    rebootScheduled,
     onRunDisable,
     onRequestReboot,
+    onCancelReboot,
     onLoadVirtStatus,
     logLineClass,
   }: Props = $props();
@@ -49,6 +53,9 @@
     <div class="bg-blue-50 border border-blue-300 rounded-xl p-3 text-sm shrink-0">
       <p class="font-bold text-blue-800 mb-1">ℹ️ 조직 관리 장치 감지됨</p>
       <p class="text-xs text-blue-700">이 장치는 Azure AD 또는 MDM으로 관리됩니다. 비활성화 후 재부팅 시 VBS 설정이 정책으로 재적용될 수 있습니다. IT 관리자에게 확인하세요.</p>
+      {#if disableOptions.skip_policy_keys}
+        <p class="text-xs text-blue-600 mt-1 font-medium">※ 그룹 정책(SOFTWARE\Policies) 경로 항목은 GPO 보호를 위해 건너뜁니다.</p>
+      {/if}
     </div>
   {/if}
 
@@ -111,12 +118,21 @@
       {disableRunning ? "실행 중..." : "비활성화 실행"}
     </button>
     {#if disableComplete}
-      <button
-        onclick={onRequestReboot}
-        class="px-5 py-2.5 font-bold bg-slate-700 hover:bg-slate-800 text-white rounded-lg transition-colors"
-      >
-        🔄 지금 재부팅
-      </button>
+      {#if rebootScheduled}
+        <button
+          onclick={onCancelReboot}
+          class="px-5 py-2.5 font-bold bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-300 rounded-lg transition-colors"
+        >
+          재부팅 취소
+        </button>
+      {:else}
+        <button
+          onclick={onRequestReboot}
+          class="px-5 py-2.5 font-bold bg-slate-700 hover:bg-slate-800 text-white rounded-lg transition-colors"
+        >
+          🔄 지금 재부팅
+        </button>
+      {/if}
     {/if}
   </div>
 

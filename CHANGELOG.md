@@ -1,5 +1,60 @@
 # Changelog
 
+## [Release-v26.05.1] - 2026-05-08
+
+> 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.
+> `v26.05.1`은 2026년 5월의 1번째 정식 Release 버전을 의미한다.
+
+### 주요 변경사항 요약
+
+#### security: 레지스트리 매니페스트 안전성 강화
+- `DeviceGuard.Locked` (`vbs.locked`) 항목을 `DisableWrite` → `InspectOnly`로 변경
+  - UEFI 펌웨어 잠금 항목은 레지스트리 쓰기로 해제 불가 — 실패해도 성공처럼 보이는 허위 동작 방지
+  - `CurrentAndControlSet001` → `CurrentOnly`로 범위 축소
+- `VulnerableDriverBlocklistEnable` (`core_isolation.vulnerable_driver_blocklist`) 항목을 `DisableWrite` → `ExcludedLegacy`로 변경
+  - HVCI와 독립적인 BYOVD(Bring Your Own Vulnerable Driver) 방어 메커니즘
+  - 비활성화 시 보안 위험이 있어 기본 조치 대상에서 제외, 사용자 명시 선택 시에만 적용
+- 위 두 항목에 대한 회귀 테스트 2개 추가
+
+#### fix: bcdedit 출력 파싱 개선
+- `get_hypervisor_launch_type()`, `get_vsm_launch_type()` 파싱 로직을 `split_whitespace()` 기반으로 개선
+  - 기존 `splitn(2, ' ')` 방식은 앞뒤 공백 편차에 취약했던 문제 해결
+- `parse_bcdedit_value()` 헬퍼 함수를 추출해 중복 제거
+- 관련 단위 테스트 4개 추가 (정상, 선행 공백, 후행 공백, 키 없음)
+
+#### feat: 재부팅 취소 기능 추가
+- 백엔드: `cancel_reboot` 커맨드 추가 (`shutdown.exe /a`)
+- 프론트엔드: `rebootScheduled` 상태 추가
+  - 재부팅 예약 후 DisablePanel·DisableActionModal에 "재부팅 취소" 버튼 표시
+  - 취소 성공 시 `rebootScheduled` 초기화
+
+#### feat: 조직 장치 정책 키 보호 (skip_policy_keys)
+- `DisableOptions`에 `skip_policy_keys` 필드 추가
+- 조직 장치(Azure AD / MDM) 감지 시 자동으로 `true` 설정
+- 활성화 시 `SOFTWARE\Policies\` 경로 레지스트리 항목을 건너뛰어 GPO 재적용 충돌 방지
+- DisablePanel에 GPO 보호 적용 중 안내 문구 표시
+
+#### refactor: 불필요 코드 및 기능 제거
+- `export_csv_auto` 함수 제거 — `export_inspection_csvs_auto`로 이미 대체된 잔재 코드
+- `runDisable()` 함수 제거 — `startDisableAction()`으로 대체 후 미호출 상태인 잔재 코드
+- 수동 CSV 내보내기 기능 전체 제거
+  - 검사 결과 CSV는 자동으로 `vmc_log` 폴더에 저장되므로 수동 내보내기 불필요
+  - 백엔드: `export_csv` 커맨드 함수 및 `lib.rs` 핸들러 등록 제거
+  - 프론트엔드: `exportSystemCsv()`, `exportVirtCsv()` 함수 및 `save` import 제거
+  - `SystemInfoPanel`, `VirtualizationPanel`에서 "CSV 내보내기" 버튼 제거
+  - 관련 안내 문구를 "자동 저장된 CSV 파일에서 확인하세요"로 수정
+
+#### chore: 명칭 통일 (VirtualBox → VM)
+- 코드베이스 전체에서 "VirtualBox" 표기를 "VM"으로 통일
+- 특정 서드파티 제품명 대신 일반 VM 도구를 대상으로 하는 목적에 맞게 표현 수정
+
+#### 검증
+- `npm run check` 통과 (0 errors, 0 warnings, 12 files)
+- Rocky Linux 9.7 native Tauri `cargo check`는 시스템 GLib 2.68.4와 Linux native Tauri 요구 GLib 2.70+ 불일치로 예외 처리
+- `cargo test`는 Rocky Linux 9 환경의 webkit2gtk4.1 미지원으로 Windows CI에서 수행
+
+---
+
 ## [Release-v26.04.15] - 2026-04-30
 
 > 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.

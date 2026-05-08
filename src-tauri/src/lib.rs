@@ -14,8 +14,7 @@ pub fn run() {
             commands::virtualization::get_virtualization_status,
             commands::disable::execute_disable,
             commands::disable::request_reboot,
-            commands::export::export_csv,
-            commands::export::export_csv_auto,
+            commands::disable::cancel_reboot,
             commands::export::export_inspection_csvs_auto,
         ])
         .run(tauri::generate_context!())

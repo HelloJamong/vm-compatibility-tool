@@ -15,11 +15,13 @@
     backupPath: string | null;
     changeCsvPath: string | null;
     version: string;
+    rebootScheduled: boolean;
     onStart: () => void;
     onToggleDisableOption: (group: DisableGroup) => void;
     onToggleOptionalRegistry: (manifestId: string) => void;
     onCancel: () => void;
     onRebootNow: () => void;
+    onCancelReboot: () => void;
     onDismiss: () => void;
   };
 
@@ -35,11 +37,13 @@
     backupPath,
     changeCsvPath,
     version,
+    rebootScheduled,
     onStart,
     onToggleDisableOption,
     onToggleOptionalRegistry,
     onCancel,
     onRebootNow,
+    onCancelReboot,
     onDismiss,
   }: Props = $props();
 
@@ -226,12 +230,21 @@
             <p class="reboot-question">지금 재부팅하시겠습니까?</p>
 
             <div class="actions">
-              <button class="button button-primary" onclick={onRebootNow}>
-                예 — 지금 재부팅 (5초 후)
-              </button>
-              <button class="button button-secondary" onclick={() => (rebootDeclined = true)}>
-                아니요 — 나중에 재부팅
-              </button>
+              {#if rebootScheduled}
+                <button class="button button-primary" disabled>
+                  ⏳ 재부팅 예약됨 (5초 후)
+                </button>
+                <button class="button button-cancel" onclick={onCancelReboot}>
+                  재부팅 취소
+                </button>
+              {:else}
+                <button class="button button-primary" onclick={onRebootNow}>
+                  예 — 지금 재부팅 (5초 후)
+                </button>
+                <button class="button button-secondary" onclick={() => (rebootDeclined = true)}>
+                  아니요 — 나중에 재부팅
+                </button>
+              {/if}
             </div>
 
           {:else}
@@ -573,6 +586,13 @@
     color: #697a92;
   }
   .button-secondary:hover { background: rgba(255, 255, 255, 0.5); }
+
+  .button-cancel {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #c2410c;
+  }
+  .button-cancel:hover { background: #ffedd5; }
 
   .action-footer {
     display: flex;
