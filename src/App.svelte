@@ -85,9 +85,9 @@
   let inspectionProgressTimer: ReturnType<typeof setInterval> | null = null;
   const inspectionTaskProgress: Record<InspectionTask, { activeCap: number; complete: number; label: string }> = {
     preparing: { activeCap: 4, complete: 5, label: "점검 준비 중..." },
-    system: { activeCap: 32, complete: 35, label: "시스템 정보 수집 중..." },
-    virtualization: { activeCap: 62, complete: 65, label: "가상화 설정 점검 중..." },
-    installedPrograms: { activeCap: 87, complete: 90, label: "설치된 프로그램 목록 수집 중..." },
+    system: { activeCap: 68, complete: 70, label: "시스템 정보 수집 중..." },
+    virtualization: { activeCap: 78, complete: 80, label: "가상화 설정 점검 중..." },
+    installedPrograms: { activeCap: 93, complete: 95, label: "설치된 프로그램 목록 수집 중..." },
     saving: { activeCap: 98, complete: 99, label: "점검 결과 CSV 저장 중..." },
     complete: { activeCap: 100, complete: 100, label: "점검 완료" },
   };

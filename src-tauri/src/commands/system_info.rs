@@ -525,10 +525,64 @@ try {
 }
 
 try {
-    $availableStates = (powercfg /a 2>$null) -join " / "
-    if (-not [string]::IsNullOrWhiteSpace($availableStates)) {
-        Write-Info "전원 참고" "시스템 절전 상태 지원 정보(powercfg /a)" $availableStates
+    $powercfgLines = @(powercfg /a 2>$null)
+    $section = ""
+    $script:currentUnavailableState = $null
+    $script:currentUnavailableReasons = New-Object System.Collections.Generic.List[string]
+
+    function Flush-UnavailableState {
+        if (-not [string]::IsNullOrWhiteSpace($script:currentUnavailableState)) {
+            $reasonText = if ($script:currentUnavailableReasons.Count -gt 0) {
+                ($script:currentUnavailableReasons | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join " / "
+            } else {
+                "사유 확인 불가"
+            }
+            Write-Info "전원 참고" "절전 상태 - $script:currentUnavailableState" "사용 불가: $reasonText"
+        }
+
+        $script:currentUnavailableState = $null
+        $script:currentUnavailableReasons.Clear()
     }
+
+    function Test-PowerStateLine {
+        param([string]$Text)
+        return $Text -match "^(대기 모드|최대 절전 모드|하이브리드 절전 모드|빠른 시작|Standby|Hibernate|Hybrid Sleep|Fast Startup)"
+    }
+
+    foreach ($line in $powercfgLines) {
+        $text = ([string]$line).Trim()
+        if ([string]::IsNullOrWhiteSpace($text)) { continue }
+
+        if ($text -match "사용할 수 없습니다|not available on this system") {
+            Flush-UnavailableState
+            $section = "unavailable"
+            continue
+        }
+
+        if ($text -match "사용할 수 있습니다|available on this system") {
+            Flush-UnavailableState
+            $section = "available"
+            continue
+        }
+
+        if ($section -eq "available") {
+            if (Test-PowerStateLine $text) {
+                Write-Info "전원 참고" "절전 상태 - $text" "사용 가능"
+            }
+            continue
+        }
+
+        if ($section -eq "unavailable") {
+            if (Test-PowerStateLine $text) {
+                Flush-UnavailableState
+                $script:currentUnavailableState = $text
+            } elseif (-not [string]::IsNullOrWhiteSpace($script:currentUnavailableState)) {
+                $script:currentUnavailableReasons.Add($text)
+            }
+        }
+    }
+
+    Flush-UnavailableState
 } catch {}
 
 try {
@@ -560,7 +614,7 @@ try {
         Write-Info "전원 관리 장치" $name "전원을 절약하기 위해 컴퓨터가 이 장치를 끌 수 있음: $state (InstanceId: $instanceId)"
     }
 
-    Write-Info "전원 참고" "장치 전원 끄기 허용 요약" "허용: $allowCount개 / 허용 안 함: $denyCount개"
+    Write-Info "전원 참고" "장치 전원 끄기 허용 요약" "허용: ${allowCount}개 / 허용 안 함: ${denyCount}개"
 } catch {
     Write-Info "전원 관리 장치" "전원을 절약하기 위해 컴퓨터가 이 장치를 끌 수 있음" "확인 불가: $($_.Exception.Message)"
 }
