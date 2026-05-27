@@ -1,5 +1,39 @@
 # Changelog
 
+## [Release-v26.05.2] - 2026-05-27
+
+> 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.
+> `v26.05.2`는 2026년 5월의 2번째 정식 Release 버전을 의미한다.
+
+### 주요 변경사항 요약
+
+#### feat: 전원/절전 참고 정보 수집 추가
+- 시스템 정보 수집 결과에 `전원 참고` 항목 추가
+  - 활성 전원 계획 GUID
+  - 절전 모드 전환 시간
+  - 최대 절전 모드 전환 시간
+  - 최대 절전 모드 활성화 상태
+  - 하이브리드 절전
+  - USB 선택적 절전
+  - PCI Express Link State Power Management
+  - `powercfg /a` 기반 시스템 절전 상태 지원 정보
+- 장치별 전원 관리 설정 수집 추가
+  - `전원 관리 장치` 항목으로 “전원을 절약하기 위해 컴퓨터가 이 장치를 끌 수 있음” 허용 여부 기록
+  - 허용/허용 안 함 장치 수 요약 기록
+- 해당 정보는 추후 참고용 진단 데이터로만 수집
+  - 가상화 점검 결과, 권장사항, 비활성화 조치 대상에는 포함하지 않음
+  - 기존 자동 저장 `SystemInfo.csv`에 함께 기록됨
+- PowerShell 출력 파싱용 TSV 헬퍼 및 단위 테스트 추가
+
+#### 검증
+- `npm run check` 통과
+- `npm run check:rust:windows` 통과
+- `npm run check:rust:windows:tests` 통과
+- `npm run lint:rust:windows` 통과
+- Linux native `cargo check`는 시스템 `glib-2.0` / `gobject-2.0` / `gio-2.0` pkg-config 라이브러리 부재로 예외 처리
+
+---
+
 ## [Release-v26.05.1] - 2026-05-08
 
 > 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.

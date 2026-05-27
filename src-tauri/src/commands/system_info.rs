@@ -355,42 +355,246 @@ fn collect_power_info(items: &mut Vec<SystemInfoItem>) {
                     "상태",
                     "전원 계획을 찾을 수 없습니다",
                 ));
-                return;
-            }
+            } else {
+                // 현재 활성 전원 계획
+                if let Some(active) = plans.iter().find(|p| p.is_active == Some(true)) {
+                    items.push(SystemInfoItem::new(
+                        "전원",
+                        "현재 전원 관리 옵션",
+                        &active.element_name,
+                    ));
+                }
 
-            // 현재 활성 전원 계획
-            if let Some(active) = plans.iter().find(|p| p.is_active == Some(true)) {
+                // 전체 목록
+                let all: Vec<String> = plans
+                    .iter()
+                    .map(|p| {
+                        if p.is_active == Some(true) {
+                            format!("{} (현재)", p.element_name)
+                        } else {
+                            p.element_name.clone()
+                        }
+                    })
+                    .collect();
                 items.push(SystemInfoItem::new(
                     "전원",
-                    "현재 전원 관리 옵션",
-                    &active.element_name,
+                    "등록된 전원 계획",
+                    &all.join(", "),
                 ));
             }
-
-            // 전체 목록
-            let all: Vec<String> = plans
-                .iter()
-                .map(|p| {
-                    if p.is_active == Some(true) {
-                        format!("{} (현재)", p.element_name)
-                    } else {
-                        p.element_name.clone()
-                    }
-                })
-                .collect();
-            items.push(SystemInfoItem::new(
-                "전원",
-                "등록된 전원 계획",
-                &all.join(", "),
-            ));
         }
         Err(e) => items.push(SystemInfoItem::error("전원", &e.to_string())),
     }
+
+    collect_power_reference_info(items);
 }
 
 #[cfg(not(windows))]
 fn collect_power_info(items: &mut Vec<SystemInfoItem>) {
     items.push(SystemInfoItem::error("전원", "Windows 전용 기능"));
+}
+
+#[cfg(windows)]
+fn collect_power_reference_info(items: &mut Vec<SystemInfoItem>) {
+    use crate::services::process_service;
+
+    let script = r#"
+function Write-Info {
+    param(
+        [string]$Category,
+        [string]$Item,
+        [string]$Value
+    )
+
+    $safeCategory = ($Category -replace "(`r|`n|`t)+", " ").Trim()
+    $safeItem = ($Item -replace "(`r|`n|`t)+", " ").Trim()
+    $safeValue = ($Value -replace "(`r|`n|`t)+", " ").Trim()
+    "$safeCategory`t$safeItem`t$safeValue" | Write-Output
+}
+
+function Format-Seconds {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return "확인 불가" }
+    $seconds = [int64]$Value
+    if ($seconds -eq 0) { return "사용 안 함" }
+    if (($seconds % 3600) -eq 0) {
+        return "$([int64]($seconds / 3600))시간 ($seconds초)"
+    }
+    if (($seconds % 60) -eq 0) {
+        return "$([int64]($seconds / 60))분 ($seconds초)"
+    }
+    return "$seconds초"
+}
+
+function Format-OnOff {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return "확인 불가" }
+    if ([int64]$Value -eq 0) { return "사용 안 함" }
+    return "사용"
+}
+
+function Format-PciExpressAspm {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return "확인 불가" }
+    switch ([int64]$Value) {
+        0 { "끔" }
+        1 { "보통 절전" }
+        2 { "최대 절전" }
+        default { "알 수 없는 값: $Value" }
+    }
+}
+
+function Format-AcDc {
+    param(
+        [object]$Setting,
+        [scriptblock]$Formatter
+    )
+
+    if ($null -eq $Setting) { return "확인 불가" }
+    $ac = & $Formatter $Setting.AC
+    $dc = & $Formatter $Setting.DC
+    return "AC: $ac / DC: $dc"
+}
+
+function Get-ActivePowerSchemeGuid {
+    try {
+        $line = powercfg /getactivescheme 2>$null | Select-Object -First 1
+        if ($line -match "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})") {
+            return $Matches[1]
+        }
+    } catch {}
+
+    try {
+        return (Get-ItemProperty -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes" -Name ActivePowerScheme -ErrorAction Stop).ActivePowerScheme
+    } catch {
+        return $null
+    }
+}
+
+function Get-PowerSettingValue {
+    param(
+        [string]$SchemeGuid,
+        [string]$SubgroupGuid,
+        [string]$SettingGuid
+    )
+
+    if ([string]::IsNullOrWhiteSpace($SchemeGuid)) { return $null }
+    $path = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\$SchemeGuid\$SubgroupGuid\$SettingGuid"
+    try {
+        $prop = Get-ItemProperty -LiteralPath $path -ErrorAction Stop
+        [pscustomobject]@{
+            AC = $prop.ACSettingIndex
+            DC = $prop.DCSettingIndex
+        }
+    } catch {
+        $null
+    }
+}
+
+$scheme = Get-ActivePowerSchemeGuid
+if ($scheme) {
+    Write-Info "전원 참고" "활성 전원 계획 GUID" $scheme
+
+    $subSleep = "238c9fa8-0aad-41ed-83f4-97be242c8f20"
+    $standbyIdle = "29f6c1db-86da-48c5-9fdb-f2b67b1f44da"
+    $hibernateIdle = "9d7815a6-7ee4-497e-8888-515a05f02364"
+    $hybridSleep = "94ac6d29-73ce-41a6-809f-6363ba21b47e"
+    $subUsb = "2a737441-1930-4402-8d77-b2bebba308a3"
+    $usbSelective = "48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
+    $subPciExpress = "501a4d13-42af-4429-9fd1-a8218c268e20"
+    $aspm = "ee12f906-d277-404b-b6da-e5fa1a576df5"
+
+    Write-Info "전원 참고" "절전 모드 전환 시간" (Format-AcDc (Get-PowerSettingValue $scheme $subSleep $standbyIdle) ${function:Format-Seconds})
+    Write-Info "전원 참고" "최대 절전 모드 전환 시간" (Format-AcDc (Get-PowerSettingValue $scheme $subSleep $hibernateIdle) ${function:Format-Seconds})
+    Write-Info "전원 참고" "하이브리드 절전" (Format-AcDc (Get-PowerSettingValue $scheme $subSleep $hybridSleep) ${function:Format-OnOff})
+    Write-Info "전원 참고" "USB 선택적 절전" (Format-AcDc (Get-PowerSettingValue $scheme $subUsb $usbSelective) ${function:Format-OnOff})
+    Write-Info "전원 참고" "PCI Express Link State Power Management" (Format-AcDc (Get-PowerSettingValue $scheme $subPciExpress $aspm) ${function:Format-PciExpressAspm})
+} else {
+    Write-Info "전원 참고" "활성 전원 계획 GUID" "확인 불가"
+}
+
+try {
+    $power = Get-ItemProperty -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -ErrorAction Stop
+    $hibernateEnabled = if ($null -ne $power.HibernateEnabled) { $power.HibernateEnabled } elseif ($null -ne $power.HibernateEnabledDefault) { $power.HibernateEnabledDefault } else { $null }
+    Write-Info "전원 참고" "최대 절전 모드 활성화 상태" (Format-OnOff $hibernateEnabled)
+} catch {
+    Write-Info "전원 참고" "최대 절전 모드 활성화 상태" "확인 불가: $($_.Exception.Message)"
+}
+
+try {
+    $availableStates = (powercfg /a 2>$null) -join " / "
+    if (-not [string]::IsNullOrWhiteSpace($availableStates)) {
+        Write-Info "전원 참고" "시스템 절전 상태 지원 정보(powercfg /a)" $availableStates
+    }
+} catch {}
+
+try {
+    $pnpNames = @{}
+    Get-CimInstance -ClassName Win32_PnPEntity -ErrorAction Stop |
+        Where-Object { $_.PNPDeviceID } |
+        ForEach-Object {
+            $pnpNames[$_.PNPDeviceID.ToUpperInvariant()] = $_.Name
+        }
+
+    $devicePowerEntries = @(Get-CimInstance -Namespace root\wmi -ClassName MSPower_DeviceEnable -ErrorAction Stop)
+    $allowCount = 0
+    $denyCount = 0
+
+    foreach ($entry in $devicePowerEntries) {
+        $instanceId = ([string]$entry.InstanceName) -replace "_\d+$", ""
+        $lookupKey = $instanceId.ToUpperInvariant()
+        $name = $pnpNames[$lookupKey]
+        if ([string]::IsNullOrWhiteSpace($name)) { $name = $instanceId }
+
+        if ($entry.Enable) {
+            $allowCount += 1
+            $state = "허용"
+        } else {
+            $denyCount += 1
+            $state = "허용 안 함"
+        }
+
+        Write-Info "전원 관리 장치" $name "전원을 절약하기 위해 컴퓨터가 이 장치를 끌 수 있음: $state (InstanceId: $instanceId)"
+    }
+
+    Write-Info "전원 참고" "장치 전원 끄기 허용 요약" "허용: $allowCount개 / 허용 안 함: $denyCount개"
+} catch {
+    Write-Info "전원 관리 장치" "전원을 절약하기 위해 컴퓨터가 이 장치를 끌 수 있음" "확인 불가: $($_.Exception.Message)"
+}
+"#;
+
+    let result = process_service::run_powershell(script);
+    if !result.success && result.stdout.trim().is_empty() {
+        let msg = result.stderr.trim();
+        items.push(SystemInfoItem::error(
+            "전원 참고",
+            if msg.is_empty() {
+                "전원 참고 정보 수집 실패"
+            } else {
+                msg
+            },
+        ));
+        return;
+    }
+
+    let mut count = 0u32;
+    for line in result.stdout.lines() {
+        if let Some((category, item, value)) = parse_power_reference_line(line) {
+            items.push(SystemInfoItem::new(category, item, value));
+            count += 1;
+        }
+    }
+
+    if count == 0 {
+        items.push(SystemInfoItem::new(
+            "전원 참고",
+            "상태",
+            "추가 전원 참고 정보 없음",
+        ));
+    }
 }
 
 // ── Windows 업데이트 이력 (PowerShell WUA COM) ─────────────────────────────
@@ -585,6 +789,23 @@ fn collect_security_hook_info(items: &mut Vec<SystemInfoItem>) {
 
 // ── 유틸 함수 ──────────────────────────────────────────────────────────────
 
+fn parse_power_reference_line(line: &str) -> Option<(&str, &str, &str)> {
+    let line = line.trim();
+    if line.is_empty() {
+        return None;
+    }
+
+    let mut parts = line.splitn(3, '\t');
+    let category = parts.next()?.trim();
+    let item = parts.next()?.trim();
+    let value = parts.next()?.trim();
+    if category.is_empty() || item.is_empty() {
+        return None;
+    }
+
+    Some((category, item, value))
+}
+
 /// WMI datetime 문자열 파싱 (형식: YYYYMMDDHHMMSS.ffffff±TZO)
 fn parse_wmi_datetime(s: &str) -> String {
     if s.len() < 14 {
@@ -627,5 +848,32 @@ fn format_vram(bytes: u64) -> String {
         format!("{:.0} GB", bytes as f64 / 1_073_741_824.0)
     } else {
         format!("{:.0} MB", bytes as f64 / 1_048_576.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_power_reference_line;
+
+    #[test]
+    fn power_reference_line_parses_tsv() {
+        assert_eq!(
+            parse_power_reference_line("전원 참고\tUSB 선택적 절전\tAC: 사용 / DC: 사용 안 함"),
+            Some(("전원 참고", "USB 선택적 절전", "AC: 사용 / DC: 사용 안 함"))
+        );
+    }
+
+    #[test]
+    fn power_reference_line_preserves_tabs_after_value_split() {
+        assert_eq!(
+            parse_power_reference_line("전원 관리 장치\tUSB Root Hub\t허용\t추가"),
+            Some(("전원 관리 장치", "USB Root Hub", "허용\t추가"))
+        );
+    }
+
+    #[test]
+    fn power_reference_line_ignores_incomplete_rows() {
+        assert_eq!(parse_power_reference_line("전원 참고\t"), None);
+        assert_eq!(parse_power_reference_line(""), None);
     }
 }
