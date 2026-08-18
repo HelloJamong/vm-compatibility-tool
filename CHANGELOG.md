@@ -1,5 +1,14 @@
 # Changelog
 
+## [Release-v26.6.0] - 2026-08-18
+
+### Fixed
+- 일부 PC에서 앱 실행 시 원인불명 크래시(`0xc0000005`)로 동작하지 않던 문제 진단 개선
+  - panic 로그 훅 추가 — `windows_subsystem = "windows"` 릴리스 빌드는 콘솔이 없어 사라지던 Rust panic 메시지를 `%TEMP%\VMCompatibilityTool\error_YYYYMMDD.log`에 기록
+  - WebView2 런타임 설치 여부 사전 확인 추가 — Tauri 창 생성 전 레지스트리(`EdgeUpdate\Clients` MS 공식 감지 키)로 확인, 없으면 원인을 알 수 있는 안내 메시지를 띄우고 종료
+
+---
+
 ## [Release-v26.05.3] - 2026-05-27
 
 > 버전 표기는 날짜가 아니라 `연도.월.n번째 버전` 규칙을 따른다.
