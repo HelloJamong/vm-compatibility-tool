@@ -1,0 +1,48 @@
+Windows Registry Editor Version 5.00
+
+; VM Compatibility Tool - required registry changes for VM operation
+; Scope: DisableWrite entries only (VBS + Core Isolation), excludes optional/legacy items.
+; Source: src-tauri/src/services/registry_manifest.rs
+;
+; NOTE: reg merge always creates/overwrites these values, even if they were
+; never set before. The app (and scripts/vm-compat-setup.bat) only change a
+; value that already exists. Review before merging on a machine where these
+; keys may currently be absent.
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard]
+"EnableVirtualizationBasedSecurity"=dword:00000000
+"RequirePlatformSecurityFeatures"=dword:00000000
+"Mandatory"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\DeviceGuard]
+"EnableVirtualizationBasedSecurity"=dword:00000000
+"RequirePlatformSecurityFeatures"=dword:00000000
+"Mandatory"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\CredentialGuard]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\CredentialGuard]
+"Enabled"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa]
+"LsaCfgFlags"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\Lsa]
+"LsaCfgFlags"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity]
+"Enabled"=dword:00000000
+"Locked"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity]
+"Enabled"=dword:00000000
+"Locked"=dword:00000000
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DeviceGuard]
+"EnableVirtualizationBasedSecurity"=dword:00000000
+"RequirePlatformSecurityFeatures"=dword:00000000
+"LsaCfgFlags"=dword:00000000
+"HypervisorEnforcedCodeIntegrity"=dword:00000000
+"HVCIEnabled"=dword:00000000
+"HVCIMATRequired"=dword:00000000
