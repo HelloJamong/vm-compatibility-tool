@@ -1,10 +1,27 @@
-use crate::models::installed_program::InstalledProgramItem;
+use crate::models::installed_program::{InstalledProgramItem, InstalledProgramsOutput};
+use anyhow::{bail, Context};
+use serde::Deserialize;
 use std::collections::HashSet;
 
-pub fn collect_installed_programs() -> Vec<InstalledProgramItem> {
+#[derive(Debug, Deserialize)]
+struct AppxPackageJson {
+    name: Option<String>,
+    publisher: Option<String>,
+    install_date: Option<String>,
+}
+
+pub fn collect_installed_programs() -> InstalledProgramsOutput {
     let mut items = collect_win32_uninstall_entries();
-    items.extend(collect_appx_packages());
-    dedupe_and_sort(items)
+    let mut warnings = Vec::new();
+    match collect_appx_packages() {
+        Ok(appx_items) => items.extend(appx_items),
+        Err(error) => warnings.push(format!("AppX 프로그램 목록 수집 실패: {error}")),
+    }
+
+    InstalledProgramsOutput {
+        items: dedupe_and_sort(items),
+        warnings,
+    }
 }
 
 fn dedupe_and_sort(items: Vec<InstalledProgramItem>) -> Vec<InstalledProgramItem> {
@@ -119,16 +136,8 @@ fn collect_win32_uninstall_entries() -> Vec<InstalledProgramItem> {
 }
 
 #[cfg(windows)]
-fn collect_appx_packages() -> Vec<InstalledProgramItem> {
+fn collect_appx_packages() -> anyhow::Result<Vec<InstalledProgramItem>> {
     use crate::services::process_service;
-    use serde::Deserialize;
-
-    #[derive(Debug, Deserialize)]
-    struct AppxPackageJson {
-        name: Option<String>,
-        publisher: Option<String>,
-        install_date: Option<String>,
-    }
 
     let script = r#"
 $startAppNames = @{}
@@ -233,20 +242,21 @@ $packages | ConvertTo-Json -Compress
 "#;
 
     let result = process_service::run_powershell(script);
-    if !result.success || result.stdout.trim().is_empty() {
-        return Vec::new();
+    if !result.success {
+        let error = if !result.stderr.trim().is_empty() {
+            result.stderr.trim()
+        } else {
+            "PowerShell 실행 실패"
+        };
+        bail!(error.to_string());
+    }
+    if result.stdout.trim().is_empty() {
+        return Ok(Vec::new());
     }
 
-    let stdout = result.stdout.trim();
-    let parsed_items: Vec<AppxPackageJson> = if stdout.starts_with('[') {
-        serde_json::from_str(stdout).unwrap_or_default()
-    } else {
-        serde_json::from_str::<AppxPackageJson>(stdout)
-            .map(|item| vec![item])
-            .unwrap_or_default()
-    };
+    let parsed_items = parse_appx_packages_json(result.stdout.trim())?;
 
-    parsed_items
+    Ok(parsed_items
         .into_iter()
         .filter_map(|item| {
             let name = item.name.unwrap_or_default();
@@ -259,12 +269,22 @@ $packages | ConvertTo-Json -Compress
                 &item.install_date.unwrap_or_default(),
             ))
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(not(windows))]
-fn collect_appx_packages() -> Vec<InstalledProgramItem> {
-    Vec::new()
+fn collect_appx_packages() -> anyhow::Result<Vec<InstalledProgramItem>> {
+    Ok(Vec::new())
+}
+
+fn parse_appx_packages_json(stdout: &str) -> anyhow::Result<Vec<AppxPackageJson>> {
+    if stdout.starts_with('[') {
+        serde_json::from_str(stdout).context("AppX JSON 배열 파싱 실패")
+    } else {
+        serde_json::from_str::<AppxPackageJson>(stdout)
+            .map(|item| vec![item])
+            .context("AppX JSON 항목 파싱 실패")
+    }
 }
 
 fn should_skip_appx_name(name: &str) -> bool {
@@ -345,7 +365,25 @@ fn distinguished_name_value<'a>(publisher: &'a str, key: &str) -> Option<&'a str
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_appx_publisher, normalize_install_date, should_skip_appx_name};
+    use super::{
+        normalize_appx_publisher, normalize_install_date, parse_appx_packages_json,
+        should_skip_appx_name,
+    };
+
+    #[test]
+    fn appx_json_parse_errors_are_not_silenced() {
+        assert!(parse_appx_packages_json("not-json").is_err());
+    }
+
+    #[test]
+    fn appx_single_item_json_is_normalized_to_a_list() {
+        let items = parse_appx_packages_json(
+            r#"{"name":"Example","publisher":"Vendor","install_date":"2026-01-01"}"#,
+        )
+        .unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].name.as_deref(), Some("Example"));
+    }
 
     #[test]
     fn normalizes_registry_install_date() {

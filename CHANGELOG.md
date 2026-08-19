@@ -1,5 +1,53 @@
 # Changelog
 
+## [Release-v26.6.1] - 2026-08-19
+
+### Added
+- beta / release GitHub Actions에 Windows 대상 Rust 단위 테스트 실행 단계 추가
+- DISM·BCD·레지스트리·AppX·CSV 처리 경계에 대한 회귀 테스트 추가
+- CSV 필드 공통 이스케이프 모듈 추가
+  - 쉼표, 줄바꿈, 큰따옴표의 RFC 4180 형식 처리
+  - `=`, `+`, `-`, `@`로 시작하는 값의 스프레드시트 수식 실행 방지
+
+### Changed
+- Tauri 보안 경계 강화
+  - CSP를 활성화해 로컬 앱에 필요한 리소스와 IPC 연결만 허용
+  - 광범위한 `core:default` 권한을 제거하고 프론트에서 사용하는 이벤트 listen / unlisten 권한만 허용
+  - 공식 Release는 코드 서명 인증서 Secret이 누락되면 서명되지 않은 실행 파일을 배포하지 않고 실패하도록 변경
+- 가상화 점검 결과의 경고·확인 불가 상태를 문자열과 가상 manifest ID 대신 명시적인 `kind`, `is_unknown` 필드로 전달
+- 설치 프로그램 수집 결과를 항목과 경고 목록으로 분리해 AppX 일부 수집 실패를 숨기지 않고 나머지 결과는 유지
+- 비활성화 조치 옵션을 항상 프론트에서 명시적으로 전달하도록 변경해 기본 전체 조치 가능성 제거
+- npm 의존성을 호환 범위 내 최신 패치 버전으로 갱신하고 알려진 취약점 정리
+- 확인·요약·비활성화 모달에 dialog 역할과 접근성 레이블 추가
+- Windows 수동 QA 체크리스트와 배포 문서를 현재 자동 CSV 저장·로그 경로·코드 서명 정책에 맞게 갱신
+
+### Fixed
+- DISM 출력 언어를 영어로 고정하고 실행 실패·예상하지 못한 출력을 비활성 또는 미설치로 오판하지 않도록 수정
+- WSL 기능 점검 실패가 정상 비활성 상태로 표시되던 문제 수정
+- `bcdedit` 실행 실패 시 `vsmlaunchtype`을 미설정으로 표시하던 문제 수정
+- 레지스트리 값 미설정과 접근 거부 등의 읽기 오류를 구분하고, 읽기 오류 항목에 선택 조치를 제공하지 않도록 수정
+- AppX PowerShell 실패와 JSON 파싱 오류가 빈 프로그램 목록으로 조용히 처리되던 문제 수정
+- 변경 작업 전에 레지스트리 백업을 먼저 생성하고, 백업·로그·CSV 저장 실패가 성공 결과로 숨겨지지 않도록 수정
+- `vsmlaunchtype` 변경 실패가 전체 조치 성공으로 처리되던 문제 수정
+- 취약 드라이버 차단 목록을 기본 비활성화 대상에서 제외해 Windows 보안 기능이 의도치 않게 약화될 수 있던 문제 수정
+- 자동 저장 CSV의 스프레드시트 수식 주입 가능성 수정
+
+### Removed
+- 사용하지 않는 Tauri Dialog 플러그인과 관련 권한 제거
+- 프론트엔드의 미사용 진행 상태·완료 상태와 중복 CSV 이스케이프 코드 제거
+
+### 검증
+- `cargo fmt --check` 통과
+- `npm run check` 통과 (0 errors, 0 warnings)
+- `npm run build` 통과
+- `npm run verify:windows` 통과
+  - Windows 대상 Rust 코드 및 테스트 컴파일
+  - clippy `-D warnings`
+- `npm audit` 및 `npm audit --omit=dev` 기준 취약점 0건 확인
+- 실제 Windows Rust 단위 테스트는 beta / release GitHub Actions에서 실행하도록 구성
+
+---
+
 ## [Release-v26.6.0] - 2026-08-18
 
 ### Fixed

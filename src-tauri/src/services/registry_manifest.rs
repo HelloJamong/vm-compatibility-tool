@@ -211,10 +211,10 @@ const MANIFEST: &[RegistryManifestEntry] = &[
         value_name: "VulnerableDriverBlocklistEnable",
         target_value: Some(0),
         disable_group: DisableGroup::CoreIsolation,
-        action: RegistryAction::ExcludedLegacy,
+        action: RegistryAction::InspectOnly,
         hive_set: RegistryHiveSet::CurrentOnly,
         label: "취약 드라이버 차단 목록",
-        rationale: "HVCI와 독립적인 BYOVD 방어 메커니즘 — VM 호환성에 불필요하며 비활성화 시 보안 위험이 있어 선택 조치로 보류",
+        rationale: "HVCI와 독립적인 BYOVD 방어 메커니즘 — VM 호환성과 무관하고 비활성화 시 보안 위험이 있어 점검만 수행",
     },
     RegistryManifestEntry {
         id: "vbs.lsa_run_as_ppl",
@@ -429,14 +429,14 @@ mod tests {
     }
 
     #[test]
-    fn vulnerable_driver_blocklist_is_selectable_as_optional() {
+    fn vulnerable_driver_blocklist_is_never_selectable() {
         let entries =
             selected_optional_entries(&["core_isolation.vulnerable_driver_blocklist".to_string()]);
         assert!(
             entries
                 .iter()
-                .any(|e| e.id == "core_isolation.vulnerable_driver_blocklist"),
-            "VulnerableDriverBlocklistEnable은 선택적 조치로 여전히 선택 가능해야 합니다"
+                .all(|e| e.id != "core_isolation.vulnerable_driver_blocklist"),
+            "VulnerableDriverBlocklistEnable은 BYOVD 방어 메커니즘이므로 어떤 자동 조치에서도 제외되어야 합니다"
         );
     }
 }

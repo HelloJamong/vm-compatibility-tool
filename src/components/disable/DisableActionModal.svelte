@@ -91,7 +91,7 @@
 
 {#if open}
   <div class="action-screen">
-    <div class="action-panel">
+    <div class="action-panel" role="dialog" aria-modal="true" aria-labelledby="disable-action-dialog-title">
       <div class="action-content">
 
         <!-- ───── WARNING ───── -->
@@ -104,7 +104,7 @@
             </svg>
           </div>
 
-          <h2 class="title">비활성화 조치 전 주의사항</h2>
+          <h2 id="disable-action-dialog-title" class="title">비활성화 조치 전 주의사항</h2>
           <p class="description">
             아래 항목들이 시스템에서 비활성화 또는 제거됩니다.<br />
             계속하기 전에 실행 중인 작업을 모두 저장하세요.
@@ -173,7 +173,7 @@
             </svg>
           </div>
 
-          <h2 class="title">조치 진행 중...</h2>
+          <h2 id="disable-action-dialog-title" class="title">조치 진행 중...</h2>
           <p class="description">시스템 설정을 변경하고 있습니다. 잠시만 기다려주세요.</p>
 
           <section class="summary-card">
@@ -203,7 +203,7 @@
             {/if}
           </div>
 
-          <h2 class="title">{hasErrors ? "일부 조치 실패" : "조치 완료"}</h2>
+          <h2 id="disable-action-dialog-title" class="title">{hasErrors ? "일부 조치 실패" : "조치 완료"}</h2>
 
           {#if !rebootDeclined}
             <p class="description">

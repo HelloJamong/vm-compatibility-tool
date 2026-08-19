@@ -153,6 +153,12 @@ cargo check --manifest-path src-tauri/Cargo.toml --tests --target x86_64-pc-wind
 cargo clippy --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc -- -D warnings
 ```
 
+Windows 빌드 호스트에서는 컴파일 점검과 별도로 단위 테스트를 실제 실행합니다.
+
+```bash
+npm run test:rust:windows
+```
+
 ### 5. 포터블 EXE 빌드
 
 ```bash
@@ -164,6 +170,8 @@ npm run tauri build -- --no-bundle
 ```bash
 npm run tauri build -- --bundles nsis
 ```
+
+공식 Release 워크플로는 코드 서명 인증서와 비밀번호 Secret이 모두 설정된 경우에만 배포를 진행하며, 누락 시 서명되지 않은 설치 파일을 게시하지 않고 실패합니다.
 
 ### 7. Windows용 대화형 빌드 스크립트
 

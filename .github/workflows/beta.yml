@@ -55,6 +55,9 @@ jobs:
       - name: Run Rust Windows target checks
         run: npm run verify:windows
 
+      - name: Run Rust tests
+        run: npm run test:rust:windows
+
       - name: Inject version into Cargo.toml
         shell: pwsh
         run: |

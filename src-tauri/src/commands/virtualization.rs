@@ -1,12 +1,46 @@
 /// 가상화 설정 점검 커맨드
 ///
 /// Registry + 프로세스(dism, bcdedit) + WMI 기반 점검
-use crate::models::virtualization::{DisableGroup, VirtualizationItem, VirtualizationSource};
+use crate::models::virtualization::{
+    DisableGroup, VirtualizationItem, VirtualizationKind, VirtualizationSource,
+};
 use crate::services::{
     process_service,
     registry_manifest::{self, RegistryAction, RegistryManifestEntry},
     registry_service::windows as reg,
 };
+
+enum FeatureState {
+    Enabled,
+    Disabled,
+    Unknown(String),
+}
+
+struct RegistryRead {
+    value: Option<u32>,
+    error: Option<String>,
+    detail: String,
+}
+
+fn feature_state(result: &process_service::ProcessResult) -> FeatureState {
+    if !result.success {
+        let message = if !result.stderr.trim().is_empty() {
+            result.stderr.trim()
+        } else if !result.stdout.trim().is_empty() {
+            result.stdout.trim()
+        } else {
+            "DISM 실행 실패"
+        };
+        return FeatureState::Unknown(message.to_string());
+    }
+
+    match process_service::parse_dism_feature_state(&result.stdout).as_deref() {
+        Some(state) if state.eq_ignore_ascii_case("Enabled") => FeatureState::Enabled,
+        Some(state) if state.eq_ignore_ascii_case("Disabled") => FeatureState::Disabled,
+        Some(state) => FeatureState::Unknown(format!("알 수 없는 DISM 상태: {state}")),
+        None => FeatureState::Unknown("DISM 상태 출력을 해석하지 못했습니다".to_string()),
+    }
+}
 
 #[tauri::command]
 pub async fn get_virtualization_status() -> Result<Vec<VirtualizationItem>, String> {
@@ -68,7 +102,8 @@ fn check_hardware_virtualization(items: &mut Vec<VirtualizationItem>) {
                     &error.to_string(),
                     "",
                 )
-                .with_source(VirtualizationSource::Wmi),
+                .with_source(VirtualizationSource::Wmi)
+                .with_unknown(true),
             );
         }
     }
@@ -83,7 +118,8 @@ fn check_hardware_virtualization(items: &mut Vec<VirtualizationItem>) {
             "Windows 전용 기능",
             "",
         )
-        .with_source(VirtualizationSource::Wmi),
+        .with_source(VirtualizationSource::Wmi)
+        .with_unknown(true),
     );
 }
 
@@ -97,40 +133,34 @@ fn check_hyperv_status(items: &mut Vec<VirtualizationItem>) {
 
     for (feature, label) in features {
         let result = process_service::get_feature_state(feature);
-        let (status, details, rec, action_required) = if !result.success {
-            (
-                "확인 불가",
-                "DISM 실행 실패 — 관리자 권한으로 실행하세요".to_string(),
-                "관리자 권한으로 실행하세요",
-                false,
-            )
-        } else if result.stdout.contains("State : Enabled") {
-            (
+        let state = feature_state(&result);
+        let is_unknown = matches!(&state, FeatureState::Unknown(_));
+        let (status, details, rec, action_required) = match state {
+            FeatureState::Enabled => (
                 "설치됨 (활성)",
                 format!("{feature} 가 활성화되어 있습니다"),
                 "VM 사용을 위해 비활성화가 필요합니다",
                 true,
-            )
-        } else if result.stdout.contains("State : Disabled") {
-            (
+            ),
+            FeatureState::Disabled => (
                 "설치됨 (비활성)",
                 format!("{feature} 가 비활성화되어 있습니다"),
                 "",
                 false,
-            )
-        } else {
-            (
-                "미설치",
-                format!("{feature} 가 설치되어 있지 않습니다"),
-                "",
+            ),
+            FeatureState::Unknown(message) => (
+                "확인 불가",
+                message,
+                "DISM 상태를 확인한 뒤 다시 점검하세요",
                 false,
-            )
+            ),
         };
 
         items.push(
             VirtualizationItem::new(label, status, &details, rec)
                 .with_source(VirtualizationSource::Feature)
-                .with_disable_group(DisableGroup::Hyperv, action_required),
+                .with_disable_group(DisableGroup::Hyperv, action_required)
+                .with_unknown(is_unknown),
         );
     }
 }
@@ -145,26 +175,34 @@ fn check_wsl_status(items: &mut Vec<VirtualizationItem>) {
 
     for (feature, label) in features {
         let result = process_service::get_feature_state(feature);
-        let (status, details, rec, action_required) = if result.stdout.contains("State : Enabled") {
-            (
+        let state = feature_state(&result);
+        let is_unknown = matches!(&state, FeatureState::Unknown(_));
+        let (status, details, rec, action_required) = match state {
+            FeatureState::Enabled => (
                 "설치됨 (활성)",
                 format!("{label} 가 활성화되어 있습니다"),
                 "VM 성능 향상을 위해 비활성화를 권장합니다",
                 true,
-            )
-        } else {
-            (
+            ),
+            FeatureState::Disabled => (
                 "비활성 또는 미설치",
                 format!("{label} 가 비활성화되어 있습니다"),
                 "",
                 false,
-            )
+            ),
+            FeatureState::Unknown(message) => (
+                "확인 불가",
+                message,
+                "DISM 상태를 확인한 뒤 다시 점검하세요",
+                false,
+            ),
         };
 
         items.push(
             VirtualizationItem::new(label, status, &details, rec)
                 .with_source(VirtualizationSource::Feature)
-                .with_disable_group(DisableGroup::Wsl, action_required),
+                .with_disable_group(DisableGroup::Wsl, action_required)
+                .with_unknown(is_unknown),
         );
     }
 }
@@ -173,8 +211,9 @@ fn check_wsl_status(items: &mut Vec<VirtualizationItem>) {
 
 fn check_hypervisor_launch(items: &mut Vec<VirtualizationItem>) {
     let launch_type = process_service::get_hypervisor_launch_type();
-    let is_active = !matches!(launch_type.to_lowercase().as_str(), "off" | "확인 불가")
-        && !launch_type.starts_with("오류");
+    let is_unknown =
+        launch_type.eq_ignore_ascii_case("확인 불가") || launch_type.starts_with("오류");
+    let is_active = !is_unknown && !launch_type.eq_ignore_ascii_case("off");
 
     items.push(
         VirtualizationItem::new(
@@ -188,7 +227,8 @@ fn check_hypervisor_launch(items: &mut Vec<VirtualizationItem>) {
             },
         )
         .with_source(VirtualizationSource::Bcd)
-        .with_disable_group(DisableGroup::Hyperv, is_active),
+        .with_disable_group(DisableGroup::Hyperv, is_active)
+        .with_unknown(is_unknown),
     );
 }
 
@@ -196,10 +236,8 @@ fn check_hypervisor_launch(items: &mut Vec<VirtualizationItem>) {
 
 fn check_vsm_launch(items: &mut Vec<VirtualizationItem>) {
     let vsm_type = process_service::get_vsm_launch_type();
-    let is_active = !matches!(
-        vsm_type.to_lowercase().as_str(),
-        "off" | "미설정" | "확인 불가"
-    ) && !vsm_type.starts_with("오류");
+    let is_unknown = vsm_type.eq_ignore_ascii_case("확인 불가") || vsm_type.starts_with("오류");
+    let is_active = !is_unknown && !matches!(vsm_type.to_lowercase().as_str(), "off" | "미설정");
 
     items.push(
         VirtualizationItem::new(
@@ -213,7 +251,8 @@ fn check_vsm_launch(items: &mut Vec<VirtualizationItem>) {
             },
         )
         .with_source(VirtualizationSource::Bcd)
-        .with_disable_group(DisableGroup::Hyperv, is_active),
+        .with_disable_group(DisableGroup::Hyperv, is_active)
+        .with_unknown(is_unknown),
     );
 }
 
@@ -223,16 +262,28 @@ fn check_registry_manifest_status(items: &mut Vec<VirtualizationItem>) {
     for entry in registry_manifest::inspect_entries() {
         let values = registry_manifest::resolve_entry_paths(entry)
             .into_iter()
-            .map(|resolved| {
-                let value = reg::get_dword(&resolved.path, resolved.value_name);
-                let detail = match value {
-                    Some(current) => {
-                        format!(r"{}\{} = {}", resolved.path, resolved.value_name, current)
-                    }
-                    None => format!(r"{}\{} = <미설정>", resolved.path, resolved.value_name),
-                };
-                (value, detail)
-            })
+            .map(
+                |resolved| match reg::get_dword_result(&resolved.path, resolved.value_name) {
+                    Ok(Some(value)) => RegistryRead {
+                        value: Some(value),
+                        error: None,
+                        detail: format!(r"{}\{} = {}", resolved.path, resolved.value_name, value),
+                    },
+                    Ok(None) => RegistryRead {
+                        value: None,
+                        error: None,
+                        detail: format!(r"{}\{} = <미설정>", resolved.path, resolved.value_name),
+                    },
+                    Err(error) => RegistryRead {
+                        value: None,
+                        error: Some(error.to_string()),
+                        detail: format!(
+                            r"{}\{} = <확인 불가: {}>",
+                            resolved.path, resolved.value_name, error
+                        ),
+                    },
+                },
+            )
             .collect::<Vec<_>>();
 
         items.push(build_registry_item(entry, &values));
@@ -241,11 +292,11 @@ fn check_registry_manifest_status(items: &mut Vec<VirtualizationItem>) {
 
 fn build_registry_item(
     entry: &RegistryManifestEntry,
-    values: &[(Option<u32>, String)],
+    values: &[RegistryRead],
 ) -> VirtualizationItem {
     let details = values
         .iter()
-        .map(|(_, detail)| detail.as_str())
+        .map(|read| read.detail.as_str())
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -255,6 +306,7 @@ fn build_registry_item(
             VirtualizationItem::new(entry.label, &registry_inspect_status(values), &details, "")
                 .with_source(VirtualizationSource::Registry)
                 .with_disable_group(entry.disable_group, false)
+                .with_unknown(has_registry_error(values))
                 .with_manifest_id(entry.id)
         }
         RegistryAction::ExcludedLegacy => {
@@ -265,17 +317,20 @@ fn build_registry_item(
 
 fn build_disable_write_registry_item(
     entry: &RegistryManifestEntry,
-    values: &[(Option<u32>, String)],
+    values: &[RegistryRead],
     details: &str,
 ) -> VirtualizationItem {
     let target_value = entry.target_value.unwrap_or(0);
     let action_required = values
         .iter()
-        .filter_map(|(value, _)| *value)
+        .filter_map(|read| read.value)
         .any(|value| value != target_value);
-    let has_any_value = values.iter().any(|(value, _)| value.is_some());
+    let has_any_value = values.iter().any(|read| read.value.is_some());
+    let has_error = has_registry_error(values);
 
-    let status = if action_required {
+    let status = if has_error {
+        "확인 불가"
+    } else if action_required {
         "활성화됨"
     } else if has_any_value {
         "비활성화됨"
@@ -292,13 +347,22 @@ fn build_disable_write_registry_item(
     VirtualizationItem::new(entry.label, status, details, recommendation)
         .with_source(VirtualizationSource::Registry)
         .with_disable_group(entry.disable_group, action_required)
+        .with_unknown(has_error)
         .with_manifest_id(entry.id)
 }
 
-fn registry_inspect_status(values: &[(Option<u32>, String)]) -> String {
+fn has_registry_error(values: &[RegistryRead]) -> bool {
+    values.iter().any(|read| read.error.is_some())
+}
+
+fn registry_inspect_status(values: &[RegistryRead]) -> String {
+    if has_registry_error(values) {
+        return "확인 불가".to_string();
+    }
+
     values
         .iter()
-        .filter_map(|(value, _)| *value)
+        .filter_map(|read| read.value)
         .next()
         .map(|value| format!("값: {value}"))
         .unwrap_or_else(|| "미설정".to_string())
@@ -306,17 +370,20 @@ fn registry_inspect_status(values: &[(Option<u32>, String)]) -> String {
 
 fn build_excluded_legacy_registry_item(
     entry: &RegistryManifestEntry,
-    values: &[(Option<u32>, String)],
+    values: &[RegistryRead],
     details: &str,
 ) -> VirtualizationItem {
     let target_value = entry.target_value.unwrap_or(0);
-    let has_any_value = values.iter().any(|(value, _)| value.is_some());
+    let has_any_value = values.iter().any(|read| read.value.is_some());
     let differs_from_target = values
         .iter()
-        .filter_map(|(value, _)| *value)
+        .filter_map(|read| read.value)
         .any(|value| value != target_value);
+    let has_error = has_registry_error(values);
 
-    let status = if differs_from_target {
+    let status = if has_error {
+        "확인 불가"
+    } else if differs_from_target {
         "활성화됨 (참고)"
     } else if has_any_value {
         "비활성화됨 (참고)"
@@ -333,7 +400,8 @@ fn build_excluded_legacy_registry_item(
     VirtualizationItem::new(entry.label, status, details, recommendation)
         .with_source(VirtualizationSource::Registry)
         .with_disable_group(entry.disable_group, false)
-        .with_optional_action_available(differs_from_target)
+        .with_optional_action_available(differs_from_target && !has_error)
+        .with_unknown(has_error)
         .with_manifest_id(entry.id)
 }
 
@@ -373,7 +441,7 @@ fn check_windows_hello_status(items: &mut Vec<VirtualizationItem>) {
             &recommendation,
         )
         .with_source(VirtualizationSource::Registry)
-        .with_manifest_id("whfb_check"),
+        .with_kind(VirtualizationKind::WhfbWarning),
     );
 }
 
@@ -478,7 +546,7 @@ fn check_organization_control(items: &mut Vec<VirtualizationItem>) {
             "비활성화 후 재부팅 시 VBS 설정이 정책으로 재적용될 수 있습니다 — IT 관리자 확인 권장",
         )
         .with_source(VirtualizationSource::Registry)
-        .with_manifest_id("org_control_check"),
+        .with_kind(VirtualizationKind::OrganizationWarning),
     );
 }
 
@@ -502,4 +570,51 @@ fn detect_organization_control() -> (bool, String) {
 #[cfg(not(windows))]
 fn detect_organization_control() -> (bool, String) {
     (false, String::new())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{feature_state, registry_inspect_status, FeatureState, RegistryRead};
+    use crate::services::process_service::ProcessResult;
+
+    fn process_result(success: bool, stdout: &str, stderr: &str) -> ProcessResult {
+        ProcessResult {
+            success,
+            stdout: stdout.to_string(),
+            stderr: stderr.to_string(),
+            exit_code: if success { 0 } else { 1 },
+        }
+    }
+
+    #[test]
+    fn feature_state_detects_enabled_dism_output() {
+        let result = process_result(true, "Feature Name : Example\r\nState : Enabled\r\n", "");
+        assert!(matches!(feature_state(&result), FeatureState::Enabled));
+    }
+
+    #[test]
+    fn feature_state_preserves_dism_failure_as_unknown() {
+        let result = process_result(false, "", "Access denied");
+        match feature_state(&result) {
+            FeatureState::Unknown(message) => assert_eq!(message, "Access denied"),
+            _ => panic!("DISM failure must not be reported as disabled"),
+        }
+    }
+
+    #[test]
+    fn feature_state_rejects_unexpected_success_output() {
+        let result = process_result(true, "The operation completed successfully.", "");
+        assert!(matches!(feature_state(&result), FeatureState::Unknown(_)));
+    }
+
+    #[test]
+    fn registry_read_errors_are_not_reported_as_missing() {
+        let values = vec![RegistryRead {
+            value: None,
+            error: Some("Access denied".to_string()),
+            detail: "Example = <확인 불가>".to_string(),
+        }];
+
+        assert_eq!(registry_inspect_status(&values), "확인 불가");
+    }
 }

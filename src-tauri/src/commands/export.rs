@@ -3,7 +3,7 @@ use crate::models::{
     installed_program::InstalledProgramItem, system_info::SystemInfoItem,
     virtualization::VirtualizationItem,
 };
-use crate::services::log_service;
+use crate::services::{csv_service::escape_field, log_service};
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
@@ -99,9 +99,9 @@ fn write_csv(
                 for item in items {
                     content.push_str(&format!(
                         "{},{},{}\n",
-                        escape_csv(&item.category),
-                        escape_csv(&item.item),
-                        escape_csv(&item.value),
+                        escape_field(&item.category),
+                        escape_field(&item.item),
+                        escape_field(&item.value),
                     ));
                 }
             }
@@ -112,10 +112,10 @@ fn write_csv(
                 for item in items {
                     content.push_str(&format!(
                         "{},{},{},{}\n",
-                        escape_csv(&item.category),
-                        escape_csv(&item.status),
-                        escape_csv(&item.details),
-                        escape_csv(&item.recommendation),
+                        escape_field(&item.category),
+                        escape_field(&item.status),
+                        escape_field(&item.details),
+                        escape_field(&item.recommendation),
                     ));
                 }
             }
@@ -126,9 +126,9 @@ fn write_csv(
                 for item in items {
                     content.push_str(&format!(
                         "{},{},{}\n",
-                        escape_csv(&item.name),
-                        escape_csv(&item.publisher),
-                        escape_csv(&item.install_date),
+                        escape_field(&item.name),
+                        escape_field(&item.publisher),
+                        escape_field(&item.install_date),
                     ));
                 }
             }
@@ -139,12 +139,4 @@ fn write_csv(
     // UTF-8 BOM 포함 파일 쓰기
     fs::write(path, content.as_bytes())?;
     Ok(())
-}
-
-fn escape_csv(field: &str) -> String {
-    if field.contains(',') || field.contains('\n') || field.contains('"') {
-        format!("\"{}\"", field.replace('"', "\"\""))
-    } else {
-        field.to_string()
-    }
 }

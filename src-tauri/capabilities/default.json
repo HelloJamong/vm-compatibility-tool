@@ -4,8 +4,7 @@
   "description": "Default capabilities for VM Compatibility Tool",
   "windows": ["main"],
   "permissions": [
-    "core:default",
-    "dialog:allow-save",
-    "dialog:allow-open"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
   ]
 }

@@ -8,6 +8,12 @@ pub struct InstalledProgramItem {
     pub install_date: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InstalledProgramsOutput {
+    pub items: Vec<InstalledProgramItem>,
+    pub warnings: Vec<String>,
+}
+
 impl InstalledProgramItem {
     pub fn new(name: &str, publisher: &str, install_date: &str) -> Self {
         Self {

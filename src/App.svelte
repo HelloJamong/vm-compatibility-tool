@@ -1,6 +1,5 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen } from "@tauri-apps/api/event";
   import { onDestroy, onMount } from "svelte";
   import AppHeader from "./components/layout/AppHeader.svelte";
@@ -17,6 +16,7 @@
     DisableOptions,
     DisableOutput,
     InstalledProgramItem,
+    InstalledProgramsOutput,
     Panel,
     ProgressEvent,
     SystemInfoItem,
@@ -54,9 +54,6 @@
   let inspectionStage = $state<InspectionStage>("idle");
   let inspectionActiveTask = $state<InspectionTask>("preparing");
   let inspectionSkippedItems = $state<string[]>([]);
-  let systemDone = $state(false);
-  let virtDone = $state(false);
-  let installedProgramsDone = $state(false);
   let inspectionCurrentAction = $state("점검 준비 중...");
 
   let disableLog = $state<string[]>([]);
@@ -81,7 +78,6 @@
     skip_policy_keys: false,
   });
   let rebootScheduled = $state(false);
-  let progressValue = $state<number | null>(null);
   let inspectionProgressTimer: ReturnType<typeof setInterval> | null = null;
   const inspectionTaskProgress: Record<InspectionTask, { activeCap: number; complete: number; label: string }> = {
     preparing: { activeCap: 4, complete: 5, label: "점검 준비 중..." },
@@ -160,12 +156,9 @@
   async function fetchSystemInfo() {
     if (systemLoaded) return;
     systemLoading = true;
-    progressValue = null;
-    systemDone = false;
     try {
       systemItems = await invoke<SystemInfoItem[]>("get_system_info");
       systemLoaded = true;
-      systemDone = true;
     } catch (e) {
       const message = `${e}`;
       systemItems = [
@@ -176,23 +169,18 @@
         },
       ];
       systemLoaded = true;
-      systemDone = false;
       recordInspectionSkip("시스템 정보", message);
       status = `시스템 정보 오류: ${e}`;
     } finally {
       systemLoading = false;
-      progressValue = null;
     }
   }
 
   async function fetchVirtStatus() {
     virtLoading = true;
-    progressValue = null;
-    virtDone = false;
     try {
       virtItems = await invoke<VirtItem[]>("get_virtualization_status");
       virtChecked = true;
-      virtDone = true;
     } catch (e) {
       const message = `${e}`;
       virtItems = [
@@ -203,29 +191,31 @@
           recommendation: "해당 항목은 건너뛰고 나머지 점검을 계속했습니다.",
           disable_group: null,
           source_type: "unknown",
+          kind: "check_failure",
+          is_unknown: true,
           action_required: false,
           optional_action_available: false,
-          manifest_id: "virtualization_check_failed",
+          manifest_id: null,
         },
       ];
       virtChecked = true;
-      virtDone = false;
       recordInspectionSkip("가상화 점검", message);
       status = `가상화 점검 오류: ${e}`;
     } finally {
       virtLoading = false;
-      progressValue = null;
     }
   }
 
   async function fetchInstalledPrograms() {
     if (installedProgramsLoaded) return;
     installedProgramsLoading = true;
-    installedProgramsDone = false;
     try {
-      installedProgramItems = await invoke<InstalledProgramItem[]>("get_installed_programs");
+      const output = await invoke<InstalledProgramsOutput>("get_installed_programs");
+      installedProgramItems = output.items;
+      for (const warning of output.warnings) {
+        recordInspectionSkip("설치 프로그램 일부", warning);
+      }
       installedProgramsLoaded = true;
-      installedProgramsDone = true;
     } catch (e) {
       const message = `${e}`;
       installedProgramItems = [
@@ -236,7 +226,6 @@
         },
       ];
       installedProgramsLoaded = true;
-      installedProgramsDone = false;
       recordInspectionSkip("설치 프로그램 목록", message);
       status = `설치 프로그램 목록 오류: ${e}`;
     } finally {
@@ -323,8 +312,7 @@
     });
 
     try {
-      const options: DisableOptions | null = virtChecked ? disableActionOptions : null;
-      const output = await invoke<DisableOutput>("execute_disable", { options });
+      const output = await invoke<DisableOutput>("execute_disable", { options: disableActionOptions });
       disableActionHasErrors = output.results.some((r) => !r.success);
       disableActionLogPath = output.log_path;
       disableActionBackupPath = output.backup_path;
@@ -412,25 +400,23 @@
   }
 
   function actionItemCount(items: VirtItem[]): number {
-    return items.filter((item) => item.action_required && item.manifest_id !== "whfb_check").length;
+    return items.filter((item) => item.action_required).length;
   }
 
   function unknownItemCount(items: VirtItem[]): number {
-    return items.filter((item) => item.status.includes("확인 불가") && item.manifest_id !== "whfb_check" && item.manifest_id !== "org_control_check").length;
+    return items.filter((item) => item.is_unknown).length;
   }
 
   function healthyItemCount(items: VirtItem[]): number {
-    return items.filter(
-      (item) => !item.action_required && !item.status.includes("확인 불가") && item.manifest_id !== "whfb_check" && item.manifest_id !== "org_control_check"
-    ).length;
+    return items.filter((item) => !item.action_required && !item.is_unknown && item.kind === "standard").length;
   }
 
   function hasWhfbWarning(items: VirtItem[]): boolean {
-    return items.some((item) => item.manifest_id === "whfb_check");
+    return items.some((item) => item.kind === "whfb_warning");
   }
 
   function hasOrgWarning(items: VirtItem[]): boolean {
-    return items.some((item) => item.manifest_id === "org_control_check");
+    return items.some((item) => item.kind === "organization_warning");
   }
 
   function selectedTaskCount(opts: DisableOptions): number {
@@ -476,7 +462,7 @@
     const counts = new Map<DisableGroup, number>();
 
     for (const item of items) {
-      if (!item.action_required || item.disable_group === null || item.manifest_id === "whfb_check") {
+      if (!item.action_required || item.disable_group === null) {
         continue;
       }
       counts.set(item.disable_group, (counts.get(item.disable_group) ?? 0) + 1);
@@ -528,14 +514,12 @@
   function markInspectionTaskSkipped(task: InspectionTask, message: string) {
     if (task === "system") {
       systemLoaded = true;
-      systemDone = false;
       if (systemItems.length === 0) {
         systemItems = [{ category: "점검 실패", item: "시스템 정보", value: message }];
       }
       recordInspectionSkip("시스템 정보", message);
     } else if (task === "virtualization") {
       virtChecked = true;
-      virtDone = false;
       if (virtItems.length === 0) {
         virtItems = [
           {
@@ -545,16 +529,17 @@
             recommendation: "해당 항목은 건너뛰고 나머지 점검을 계속했습니다.",
             disable_group: null,
             source_type: "unknown",
+            kind: "check_failure",
+            is_unknown: true,
             action_required: false,
             optional_action_available: false,
-            manifest_id: "virtualization_check_failed",
+            manifest_id: null,
           },
         ];
       }
       recordInspectionSkip("가상화 점검", message);
     } else if (task === "installedPrograms") {
       installedProgramsLoaded = true;
-      installedProgramsDone = false;
       if (installedProgramItems.length === 0) {
         installedProgramItems = [
           {
@@ -670,7 +655,6 @@
       {status}
       {version}
       isBusy={systemLoading || virtLoading || installedProgramsLoading || disableRunning}
-      {progressValue}
     />
 
     <ConfirmDialog

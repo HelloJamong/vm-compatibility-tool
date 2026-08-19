@@ -1,5 +1,6 @@
 /// 에러 로그 — %TEMP%\VMCompatibilityTool\error_YYYYMMDD.log
-/// 운영 로그 — {exe_dir}\logs\YYYYMMDD_HHMMSS_{computer_name}.log
+/// 운영 로그 — {exe_dir}\vmc_logs\YYYYMMDD_HHMMSS_{computer_name}.log
+use crate::services::csv_service::escape_field;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
@@ -73,39 +74,44 @@ pub fn log_error(context: &str, error: &str) {
     }
 }
 
-/// 운영 로그 + 레지스트리 백업 파일 저장
-/// 반환: (log_path, backup_path) — 실패 시 None
-pub fn save_operation_log(
-    log_lines: &[String],
+/// 레지스트리 변경 전에 복구 파일을 먼저 저장합니다.
+pub fn save_registry_backup(
     backup_entries: &[RegistryBackupEntry],
-) -> Option<(String, String)> {
-    let log_dir = operation_log_dir()?;
-    fs::create_dir_all(&log_dir).ok()?;
+) -> anyhow::Result<Option<String>> {
+    if backup_entries.is_empty() {
+        return Ok(None);
+    }
 
-    let bak_dir = backup_dir()?;
-    fs::create_dir_all(&bak_dir).ok()?;
+    let bak_dir = backup_dir().ok_or_else(|| anyhow::anyhow!("백업 경로를 찾을 수 없습니다"))?;
+    fs::create_dir_all(&bak_dir)?;
+    let now = chrono::Local::now();
+    let ts = now.format("%y%m%d_%H%M%S").to_string();
+    let reg_path = bak_dir.join(format!("{}_backup.reg", ts));
+    write_reg_backup(&reg_path, backup_entries, &now)?;
+
+    Ok(Some(reg_path.to_string_lossy().into_owned()))
+}
+
+/// 운영 로그 저장
+pub fn save_operation_log(log_lines: &[String]) -> anyhow::Result<String> {
+    let log_dir =
+        operation_log_dir().ok_or_else(|| anyhow::anyhow!("로그 경로를 찾을 수 없습니다"))?;
+    fs::create_dir_all(&log_dir)?;
 
     let now = chrono::Local::now();
     let ts = now.format("%y%m%d_%H%M%S").to_string();
-    let cn = computer_name();
-
-    let log_path = log_dir.join(format!("{}_{}.log", ts, cn));
-    let reg_path = bak_dir.join(format!("{}_backup.reg", ts));
+    let log_path = log_dir.join(format!("{}_{}.log", ts, computer_name()));
 
     write_operation_log(&log_path, log_lines, &now)?;
-    write_reg_backup(&reg_path, backup_entries, &now)?;
 
-    Some((
-        log_path.to_string_lossy().into_owned(),
-        reg_path.to_string_lossy().into_owned(),
-    ))
+    Ok(log_path.to_string_lossy().into_owned())
 }
 
 /// 비활성화 조치 전/후 비교 CSV 저장
-/// 반환: CSV 파일 경로 — 실패 시 None
-pub fn save_disable_change_csv(entries: &[DisableChangeEntry]) -> Option<String> {
-    let log_dir = operation_log_dir()?;
-    fs::create_dir_all(&log_dir).ok()?;
+pub fn save_disable_change_csv(entries: &[DisableChangeEntry]) -> anyhow::Result<String> {
+    let log_dir =
+        operation_log_dir().ok_or_else(|| anyhow::anyhow!("로그 경로를 찾을 수 없습니다"))?;
+    fs::create_dir_all(&log_dir)?;
 
     let now = chrono::Local::now();
     let ts = now.format("%y%m%d_%H%M%S").to_string();
@@ -113,14 +119,14 @@ pub fn save_disable_change_csv(entries: &[DisableChangeEntry]) -> Option<String>
     let csv_path = log_dir.join(format!("{}_{}-DisableResult.csv", ts, cn));
 
     write_disable_change_csv(&csv_path, entries, &now)?;
-    Some(csv_path.to_string_lossy().into_owned())
+    Ok(csv_path.to_string_lossy().into_owned())
 }
 
 fn write_disable_change_csv(
     path: &PathBuf,
     entries: &[DisableChangeEntry],
     now: &chrono::DateTime<chrono::Local>,
-) -> Option<()> {
+) -> std::io::Result<()> {
     let mut content = String::new();
     content.push('\u{FEFF}');
     content.push_str("VM Compatibility Tool — 조치 전후 비교\n");
@@ -131,26 +137,25 @@ fn write_disable_change_csv(
     for entry in entries {
         content.push_str(&format!(
             "{},{},{},{},{},{},{}\n",
-            escape_csv(&entry.group),
-            escape_csv(&entry.item),
-            escape_csv(&entry.target),
-            escape_csv(&entry.before),
-            escape_csv(&entry.after),
-            escape_csv(&entry.result),
-            escape_csv(&entry.message),
+            escape_field(&entry.group),
+            escape_field(&entry.item),
+            escape_field(&entry.target),
+            escape_field(&entry.before),
+            escape_field(&entry.after),
+            escape_field(&entry.result),
+            escape_field(&entry.message),
         ));
     }
 
-    let mut file = fs::File::create(path).ok()?;
-    file.write_all(content.as_bytes()).ok()?;
-    Some(())
+    let mut file = fs::File::create(path)?;
+    file.write_all(content.as_bytes())
 }
 
 fn write_operation_log(
     path: &PathBuf,
     lines: &[String],
     now: &chrono::DateTime<chrono::Local>,
-) -> Option<()> {
+) -> std::io::Result<()> {
     let header = format!(
         "VM Compatibility Tool — 운영 로그\n생성: {}\n컴퓨터: {}\n{}\n\n",
         now.format("%Y-%m-%d %H:%M:%S"),
@@ -164,16 +169,15 @@ fn write_operation_log(
         content.push('\n');
     }
 
-    let mut file = fs::File::create(path).ok()?;
-    file.write_all(content.as_bytes()).ok()?;
-    Some(())
+    let mut file = fs::File::create(path)?;
+    file.write_all(content.as_bytes())
 }
 
 fn write_reg_backup(
     path: &PathBuf,
     entries: &[RegistryBackupEntry],
     now: &chrono::DateTime<chrono::Local>,
-) -> Option<()> {
+) -> std::io::Result<()> {
     let mut lines: Vec<String> = vec![
         "Windows Registry Editor Version 5.00".to_string(),
         String::new(),
@@ -207,9 +211,8 @@ fn write_reg_backup(
 
     let text = lines.join("\r\n");
     let encoded = encode_utf16le_with_bom(&text);
-    let mut file = fs::File::create(path).ok()?;
-    file.write_all(&encoded).ok()?;
-    Some(())
+    let mut file = fs::File::create(path)?;
+    file.write_all(&encoded)
 }
 
 fn encode_utf16le_with_bom(s: &str) -> Vec<u8> {
@@ -220,12 +223,4 @@ fn encode_utf16le_with_bom(s: &str) -> Vec<u8> {
         bytes.push((unit >> 8) as u8);
     }
     bytes
-}
-
-fn escape_csv(field: &str) -> String {
-    if field.contains(',') || field.contains('\n') || field.contains('"') {
-        format!("\"{}\"", field.replace('"', "\"\""))
-    } else {
-        field.to_string()
-    }
 }

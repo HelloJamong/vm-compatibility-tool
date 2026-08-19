@@ -11,12 +11,12 @@
     "check": "svelte-check",
     "check:rust:windows": "cargo check --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc",
     "check:rust:windows:tests": "cargo check --manifest-path src-tauri/Cargo.toml --tests --target x86_64-pc-windows-msvc",
+    "test:rust:windows": "cargo test --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc",
     "lint:rust:windows": "cargo clippy --manifest-path src-tauri/Cargo.toml --target x86_64-pc-windows-msvc -- -D warnings",
     "verify:windows": "npm run check:rust:windows && npm run check:rust:windows:tests && npm run lint:rust:windows"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2"
+    "@tauri-apps/api": "^2"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5",

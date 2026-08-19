@@ -28,7 +28,7 @@
   }: Props = $props();
 
   let actionItems = $derived(
-    virtItems.filter(item => item.action_required || item.manifest_id === "whfb_check" || item.manifest_id === "org_control_check")
+    virtItems.filter(item => item.action_required || item.kind === "whfb_warning" || item.kind === "organization_warning")
   );
 </script>
 
@@ -74,8 +74,8 @@
             </thead>
             <tbody>
               {#each actionItems as item, i}
-                {@const isWhfbCheck = item.manifest_id === "whfb_check"}
-                {@const isOrgCheck = item.manifest_id === "org_control_check"}
+                {@const isWhfbCheck = item.kind === "whfb_warning"}
+                {@const isOrgCheck = item.kind === "organization_warning"}
                 <tr class="{i % 2 === 0 ? 'bg-white' : 'bg-gray-50'} {isWhfbCheck || isOrgCheck ? 'hover:bg-blue-50' : 'hover:bg-red-50'} transition-colors align-top">
                   <td class="px-3 py-2 border-b font-medium text-gray-800 text-xs align-top break-words">{item.category}</td>
                   <td class="px-3 py-2 border-b align-top">

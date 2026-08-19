@@ -31,12 +31,9 @@ impl ProcessResult {
 
 /// DISM으로 Windows 기능 상태 조회
 pub fn get_feature_state(feature_name: &str) -> ProcessResult {
+    let args = feature_state_args(feature_name);
     Command::new("dism.exe")
-        .args([
-            "/online",
-            "/get-featureinfo",
-            &format!("/featurename:{}", feature_name),
-        ])
+        .args(args)
         .creation_flags_no_window()
         .output()
         .map(ProcessResult::from_output)
@@ -45,17 +42,41 @@ pub fn get_feature_state(feature_name: &str) -> ProcessResult {
 
 /// DISM으로 Windows 기능 비활성화
 pub fn disable_feature(feature_name: &str) -> ProcessResult {
+    let args = disable_feature_args(feature_name);
     Command::new("dism.exe")
-        .args([
-            "/online",
-            "/disable-feature",
-            &format!("/featurename:{}", feature_name),
-            "/norestart",
-        ])
+        .args(args)
         .creation_flags_no_window()
         .output()
         .map(ProcessResult::from_output)
         .unwrap_or_else(|e| ProcessResult::error(&e.to_string()))
+}
+
+fn feature_state_args(feature_name: &str) -> Vec<String> {
+    vec![
+        "/English".to_string(),
+        "/online".to_string(),
+        "/get-featureinfo".to_string(),
+        format!("/featurename:{feature_name}"),
+    ]
+}
+
+fn disable_feature_args(feature_name: &str) -> Vec<String> {
+    vec![
+        "/English".to_string(),
+        "/online".to_string(),
+        "/disable-feature".to_string(),
+        format!("/featurename:{feature_name}"),
+        "/norestart".to_string(),
+    ]
+}
+
+pub fn parse_dism_feature_state(output: &str) -> Option<String> {
+    output.lines().find_map(|line| {
+        let (key, value) = line.split_once(':')?;
+        key.trim()
+            .eq_ignore_ascii_case("State")
+            .then(|| value.trim().to_string())
+    })
 }
 
 /// bcdedit으로 hypervisorlaunchtype 비활성화
@@ -77,6 +98,9 @@ pub fn get_hypervisor_launch_type() -> String {
 
     match result {
         Ok(output) => {
+            if !output.status.success() {
+                return format_process_output_error(&output);
+            }
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             parse_bcdedit_value(&stdout, "hypervisorlaunchtype")
                 .unwrap_or_else(|| "확인 불가".to_string())
@@ -104,12 +128,27 @@ pub fn get_vsm_launch_type() -> String {
 
     match result {
         Ok(output) => {
+            if !output.status.success() {
+                return format_process_output_error(&output);
+            }
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            parse_bcdedit_value(&stdout, "vsmlaunchtype")
-                .unwrap_or_else(|| "미설정".to_string())
+            parse_bcdedit_value(&stdout, "vsmlaunchtype").unwrap_or_else(|| "미설정".to_string())
         }
         Err(e) => format!("오류: {}", e),
     }
+}
+
+fn format_process_output_error(output: &std::process::Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let message = if !stderr.trim().is_empty() {
+        stderr.trim()
+    } else if !stdout.trim().is_empty() {
+        stdout.trim()
+    } else {
+        "출력 없음"
+    };
+    format!("오류: {message}")
 }
 
 /// bcdedit /enum 출력에서 특정 키의 값을 파싱합니다.
@@ -200,7 +239,24 @@ impl CommandExt for Command {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_bcdedit_value, wrap_powershell_script};
+    use super::{
+        disable_feature_args, feature_state_args, parse_bcdedit_value, parse_dism_feature_state,
+        wrap_powershell_script,
+    };
+
+    #[test]
+    fn dism_feature_commands_force_english_output() {
+        assert_eq!(feature_state_args("Example").first().unwrap(), "/English");
+        assert_eq!(disable_feature_args("Example").first().unwrap(), "/English");
+    }
+
+    #[test]
+    fn dism_feature_state_parser_handles_whitespace() {
+        assert_eq!(
+            parse_dism_feature_state("Feature Name : Example\r\nState : Enabled\r\n"),
+            Some("Enabled".to_string())
+        );
+    }
 
     #[test]
     fn powershell_wrapper_forces_utf8_io() {

@@ -24,9 +24,14 @@
 
 {#if open}
   <div class="absolute inset-0 bg-black/35 flex items-center justify-center p-4">
-    <div class="w-full max-w-md rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden">
+    <div
+      class="w-full max-w-md rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-dialog-title"
+    >
       <div class="px-5 py-4 border-b border-gray-200">
-        <h3 class="text-base font-bold text-gray-900">{title}</h3>
+        <h3 id="confirm-dialog-title" class="text-base font-bold text-gray-900">{title}</h3>
         <p class="mt-1 text-sm text-gray-500">{message}</p>
       </div>
       {#if bullets.length > 0}

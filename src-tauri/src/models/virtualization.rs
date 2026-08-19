@@ -30,6 +30,15 @@ pub enum VirtualizationSource {
     Registry,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VirtualizationKind {
+    Standard,
+    WhfbWarning,
+    OrganizationWarning,
+    CheckFailure,
+}
+
 /// 가상화 점검 테이블 행
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VirtualizationItem {
@@ -39,6 +48,8 @@ pub struct VirtualizationItem {
     pub recommendation: String,
     pub disable_group: Option<DisableGroup>,
     pub source_type: VirtualizationSource,
+    pub kind: VirtualizationKind,
+    pub is_unknown: bool,
     pub action_required: bool,
     pub optional_action_available: bool,
     pub manifest_id: Option<String>,
@@ -53,6 +64,8 @@ impl VirtualizationItem {
             recommendation: recommendation.to_string(),
             disable_group: None,
             source_type: VirtualizationSource::Unknown,
+            kind: VirtualizationKind::Standard,
+            is_unknown: false,
             action_required: false,
             optional_action_available: false,
             manifest_id: None,
@@ -71,6 +84,16 @@ impl VirtualizationItem {
 
     pub fn with_source(mut self, source_type: VirtualizationSource) -> Self {
         self.source_type = source_type;
+        self
+    }
+
+    pub fn with_kind(mut self, kind: VirtualizationKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    pub fn with_unknown(mut self, is_unknown: bool) -> Self {
+        self.is_unknown = is_unknown;
         self
     }
 
@@ -114,7 +137,7 @@ pub struct ProgressEvent {
 /// 비활성화 옵션 — selective 모드에서 필요한 항목만 실행
 ///
 /// 프론트엔드가 가상화 점검 결과를 기반으로 계산하여 전달.
-/// None이면 모든 항목 실행 (전체 모드).
+/// 호출자가 실행할 항목을 명시적으로 전달합니다.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DisableOptions {
     pub hyperv: bool,
@@ -126,17 +149,4 @@ pub struct DisableOptions {
     /// 조직 관리 기기에서 GPO 재적용으로 복구될 수 있는 정책 경로 쓰기를 방지합니다.
     #[serde(default)]
     pub skip_policy_keys: bool,
-}
-
-impl DisableOptions {
-    pub fn all() -> Self {
-        Self {
-            hyperv: true,
-            wsl: true,
-            vbs: true,
-            core_isolation: true,
-            optional_registry_ids: Vec::new(),
-            skip_policy_keys: false,
-        }
-    }
 }

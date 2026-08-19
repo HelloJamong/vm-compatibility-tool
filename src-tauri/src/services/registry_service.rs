@@ -9,10 +9,26 @@ pub mod windows {
 
     /// 단일 DWORD 값 읽기 — 키 또는 값이 없으면 None
     pub fn get_dword(path: &str, name: &str) -> Option<u32> {
-        RegKey::predef(HKEY_LOCAL_MACHINE)
-            .open_subkey(path)
-            .and_then(|key| key.get_value::<u32, _>(name))
-            .ok()
+        get_dword_result(path, name).ok().flatten()
+    }
+
+    /// 단일 DWORD 값 읽기 — 미설정과 실제 읽기 오류를 구분합니다.
+    pub fn get_dword_result(path: &str, name: &str) -> anyhow::Result<Option<u32>> {
+        let key = match RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(path) {
+            Ok(key) => key,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => {
+                return Err(error).with_context(|| format!("레지스트리 키 읽기 실패: {path}"))
+            }
+        };
+
+        match key.get_value::<u32, _>(name) {
+            Ok(value) => Ok(Some(value)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => {
+                Err(error).with_context(|| format!("레지스트리 값 읽기 실패: {path}\\{name}"))
+            }
+        }
     }
 
     /// Windows 버전/빌드 정보 (Registry 기반)
@@ -185,6 +201,9 @@ pub mod windows {
 
     pub fn get_dword(_path: &str, _name: &str) -> Option<u32> {
         None
+    }
+    pub fn get_dword_result(_path: &str, _name: &str) -> Result<Option<u32>> {
+        Ok(None)
     }
     pub fn key_has_subkeys(_path: &str) -> bool {
         false

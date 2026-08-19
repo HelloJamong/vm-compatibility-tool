@@ -40,7 +40,7 @@
 
 {#if open}
   <div class="inspection-screen">
-    <div class="inspection-panel">
+    <div class="inspection-panel" role="dialog" aria-modal="true" aria-labelledby="inspection-dialog-title">
       <div class="inspection-content">
         <div class="status-icon-wrap" aria-hidden="true">
           <svg viewBox="0 0 48 48" class="status-icon">
@@ -51,7 +51,7 @@
           </svg>
         </div>
 
-        <h2 class="title">{complete ? "시스템 점검 완료" : "시스템 점검 중"}</h2>
+        <h2 id="inspection-dialog-title" class="title">{complete ? "시스템 점검 완료" : "시스템 점검 중"}</h2>
 
         <p class="description">
           {#if complete}

@@ -1,8 +1,10 @@
 export type Panel = "menu" | "systemInfo" | "virtualization" | "disable";
 export type SystemInfoItem = { category: string; item: string; value: string };
 export type InstalledProgramItem = { name: string; publisher: string; install_date: string };
+export type InstalledProgramsOutput = { items: InstalledProgramItem[]; warnings: string[] };
 export type DisableGroup = "hyperv" | "wsl" | "vbs" | "core_isolation";
 export type VirtSource = "unknown" | "wmi" | "feature" | "bcd" | "registry";
+export type VirtKind = "standard" | "whfb_warning" | "organization_warning" | "check_failure";
 export type VirtItem = {
   category: string;
   status: string;
@@ -10,6 +12,8 @@ export type VirtItem = {
   recommendation: string;
   disable_group: DisableGroup | null;
   source_type: VirtSource;
+  kind: VirtKind;
+  is_unknown: boolean;
   action_required: boolean;
   optional_action_available: boolean;
   manifest_id: string | null;

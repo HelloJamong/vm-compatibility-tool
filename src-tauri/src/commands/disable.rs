@@ -56,19 +56,20 @@ enum FeatureDisableOutcome {
 }
 
 /// 비활성화 실행
-///
-/// - `options`: None이면 전체 실행, Some이면 가상화 점검 결과 기반 선택 실행
 #[tauri::command]
 pub async fn execute_disable(
     app: AppHandle,
     options: Option<DisableOptions>,
 ) -> Result<DisableOutput, String> {
-    tokio::task::spawn_blocking(move || {
-        run_disable_tasks(&app, options.unwrap_or_else(DisableOptions::all))
-    })
-    .await
-    .map_err(|e| format!("작업 실행 오류: {e}"))?
-    .map_err(|e| e.to_string())
+    let options = require_disable_options(options)?;
+    tokio::task::spawn_blocking(move || run_disable_tasks(&app, options))
+        .await
+        .map_err(|e| format!("작업 실행 오류: {e}"))?
+        .map_err(|e| e.to_string())
+}
+
+fn require_disable_options(options: Option<DisableOptions>) -> Result<DisableOptions, String> {
+    options.ok_or_else(|| "비활성화 옵션이 누락되어 작업을 중단했습니다.".to_string())
 }
 
 fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<DisableOutput> {
@@ -128,6 +129,9 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
     }
 
     let planned_changes = collect_planned_disable_changes(&opts);
+    let backup_path = log_service::save_registry_backup(&backup_entries).map_err(|error| {
+        anyhow::anyhow!("레지스트리 백업 생성 실패 — 조치를 시작하지 않았습니다: {error}")
+    })?;
 
     let total = tasks.len() as u32;
     let mut results = Vec::new();
@@ -180,14 +184,31 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
     log_lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━".to_string());
     log_lines.push("모든 작업 완료".to_string());
 
-    // 운영 로그 + 백업 파일 저장
-    let (log_path, backup_path) = match log_service::save_operation_log(&log_lines, &backup_entries)
-    {
-        Some((lp, bp)) => (Some(lp), Some(bp)),
-        None => (None, None),
-    };
     let change_entries = collect_disable_change_results(planned_changes);
-    let change_csv_path = log_service::save_disable_change_csv(&change_entries);
+    let change_csv_path = match log_service::save_disable_change_csv(&change_entries) {
+        Ok(path) => Some(path),
+        Err(error) => {
+            push_artifact_failure(
+                &mut results,
+                &mut log_lines,
+                "조치 결과 CSV 저장",
+                &error.to_string(),
+            );
+            None
+        }
+    };
+    let log_path = match log_service::save_operation_log(&log_lines) {
+        Ok(path) => Some(path),
+        Err(error) => {
+            push_artifact_failure(
+                &mut results,
+                &mut log_lines,
+                "운영 로그 저장",
+                &error.to_string(),
+            );
+            None
+        }
+    };
 
     Ok(DisableOutput {
         results,
@@ -195,6 +216,22 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
         backup_path,
         change_csv_path,
     })
+}
+
+fn push_artifact_failure(
+    results: &mut Vec<DisableResult>,
+    log_lines: &mut Vec<String>,
+    task: &str,
+    error: &str,
+) {
+    let message = format!("{task} 실패: {error}");
+    log_service::log_error(task, error);
+    log_lines.push(format!("⚠️ {message}"));
+    results.push(DisableResult {
+        task: task.to_string(),
+        success: false,
+        message,
+    });
 }
 
 fn collect_planned_disable_changes(opts: &DisableOptions) -> Vec<PlannedDisableChange> {
@@ -362,18 +399,8 @@ fn get_feature_state_display(feature: &str) -> String {
         };
     }
 
-    parse_dism_feature_state(&result.stdout).unwrap_or_else(|| "확인 불가".to_string())
-}
-
-fn parse_dism_feature_state(stdout: &str) -> Option<String> {
-    stdout.lines().find_map(|line| {
-        let (key, value) = line.split_once(':')?;
-        if key.trim().eq_ignore_ascii_case("State") {
-            Some(value.trim().to_string())
-        } else {
-            None
-        }
-    })
+    process_service::parse_dism_feature_state(&result.stdout)
+        .unwrap_or_else(|| "확인 불가".to_string())
 }
 
 fn registry_value_display(path: &str, value_name: &str) -> String {
@@ -484,17 +511,34 @@ fn disable_hyperv() -> DisableResult {
     }
 
     let vsm = process_service::disable_vsm_launch();
-    if vsm.success {
-        messages.push("✓ vsmlaunchtype off".to_string());
-    } else {
-        messages.push(format!("- vsmlaunchtype: 건너뜀 ({})", vsm.stderr.trim()));
-    }
+    record_vsm_disable_result(&vsm, &mut messages, &mut all_success);
 
     DisableResult {
         task: "Hyper-V 비활성화".to_string(),
         success: all_success,
         message: messages.join("\n"),
     }
+}
+
+fn record_vsm_disable_result(
+    result: &process_service::ProcessResult,
+    messages: &mut Vec<String>,
+    all_success: &mut bool,
+) {
+    if result.success {
+        messages.push("✓ vsmlaunchtype off".to_string());
+        return;
+    }
+
+    let error = if !result.stderr.trim().is_empty() {
+        result.stderr.trim()
+    } else if !result.stdout.trim().is_empty() {
+        result.stdout.trim()
+    } else {
+        "알 수 없는 오류"
+    };
+    messages.push(format!("✗ vsmlaunchtype 설정 실패: {error}"));
+    *all_success = false;
 }
 
 fn disable_wsl() -> DisableResult {
@@ -522,7 +566,11 @@ fn disable_wsl() -> DisableResult {
     }
 }
 
-fn disable_registry_group(group: DisableGroup, task_name: &str, skip_policy_keys: bool) -> DisableResult {
+fn disable_registry_group(
+    group: DisableGroup,
+    task_name: &str,
+    skip_policy_keys: bool,
+) -> DisableResult {
     let all_entries = registry_manifest::disable_write_entries(group);
 
     let (skipped, entries): (Vec<_>, Vec<_>) = if skip_policy_keys {
@@ -637,6 +685,23 @@ mod tests {
             stdout: stdout.to_string(),
             stderr: stderr.to_string(),
         }
+    }
+
+    #[test]
+    fn missing_disable_options_are_rejected() {
+        assert!(require_disable_options(None).is_err());
+    }
+
+    #[test]
+    fn vsm_disable_failure_marks_hyperv_task_failed() {
+        let result = make_result(false, 1, "", "Access denied");
+        let mut messages = Vec::new();
+        let mut success = true;
+
+        record_vsm_disable_result(&result, &mut messages, &mut success);
+
+        assert!(!success);
+        assert!(messages[0].contains("Access denied"));
     }
 
     #[test]
