@@ -83,13 +83,6 @@ jobs:
       - name: Run Rust tests
         run: npm run test:rust:windows
 
-      - name: Require code-signing secrets
-        if: env.HAS_CODESIGN_SECRETS != 'true'
-        shell: pwsh
-        run: |
-          Write-Error "공식 릴리스에는 WINDOWS_CODESIGN_PFX_BASE64 및 WINDOWS_CODESIGN_PFX_PASSWORD가 필요합니다."
-          exit 1
-
       - name: Inject version into Cargo.toml
         shell: pwsh
         run: |
@@ -128,6 +121,7 @@ jobs:
           Copy-Item $src.FullName $dest
 
       - name: Sign EXE with internal certificate
+        if: env.HAS_CODESIGN_SECRETS == 'true'
         shell: pwsh
         env:
           WINDOWS_CODESIGN_PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
@@ -138,12 +132,21 @@ jobs:
             -Files "vm-compatibility-tool.exe"
 
       - name: Signing summary (enabled)
+        if: env.HAS_CODESIGN_SECRETS == 'true'
         shell: pwsh
         run: |
           echo "## 🔏 Code signing" >> $env:GITHUB_STEP_SUMMARY
           echo "" >> $env:GITHUB_STEP_SUMMARY
           echo "- Internal/self-signed PFX signing: enabled" >> $env:GITHUB_STEP_SUMMARY
           echo "- End-user PCs must trust the internal root/intermediate certificate to avoid unknown publisher warnings." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Signing summary (skipped)
+        if: env.HAS_CODESIGN_SECRETS != 'true'
+        shell: pwsh
+        run: |
+          echo "## ⚠️ Code signing skipped" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Set WINDOWS_CODESIGN_PFX_BASE64 and WINDOWS_CODESIGN_PFX_PASSWORD to enable internal signing." >> $env:GITHUB_STEP_SUMMARY
 
       - name: Write release notes from CHANGELOG
         shell: python

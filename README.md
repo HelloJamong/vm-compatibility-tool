@@ -171,8 +171,6 @@ npm run tauri build -- --no-bundle
 npm run tauri build -- --bundles nsis
 ```
 
-공식 Release 워크플로는 코드 서명 인증서와 비밀번호 Secret이 모두 설정된 경우에만 배포를 진행하며, 누락 시 서명되지 않은 설치 파일을 게시하지 않고 실패합니다.
-
 ### 7. Windows용 대화형 빌드 스크립트
 
 ```bat
