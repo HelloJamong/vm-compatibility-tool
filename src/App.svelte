@@ -142,11 +142,27 @@
     currentPanel = panel;
   }
 
+  // 백엔드가 응답하지 않아도 진행바가 멈추지 않도록 하는 최종 안전장치.
+  // 백엔드 자체 예산(시스템 정보 90초)보다 길게 잡아 부분 결과를 우선한다.
+  const INSPECTION_STEP_TIMEOUT_MS = 120_000;
+
+  function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`${label} 응답 시간 초과 (${Math.round(ms / 1000)}초) — 건너뜁니다`)),
+          ms,
+        ),
+      ),
+    ]);
+  }
+
   async function runInspectionStep(task: InspectionTask, action: () => Promise<void>) {
     inspectionActiveTask = task;
     inspectionCurrentAction = inspectionTaskProgress[task].label;
     try {
-      await action();
+      await withTimeout(action(), INSPECTION_STEP_TIMEOUT_MS, inspectionTaskProgress[task].label);
     } catch (e) {
       markInspectionTaskSkipped(task, `${e}`);
     }

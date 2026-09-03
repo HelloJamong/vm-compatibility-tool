@@ -4,7 +4,13 @@
 /// WMI + Registry 양쪽 수집
 use crate::models::system_info::SystemInfoItem;
 use crate::services::{event_log_service, registry_service::windows as reg};
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::Duration;
 use tauri::AppHandle;
+
+/// 시스템 정보 수집 전체 예산. WMI 쿼리는 저장소 손상 시 취소가 불가능해
+/// 무한 대기할 수 있으므로, 초과하면 그때까지 모은 항목만 반환한다.
+const SYSTEM_INFO_BUDGET: Duration = Duration::from_secs(90);
 
 #[tauri::command]
 pub fn get_app_version() -> String {
@@ -20,28 +26,65 @@ pub fn exit_app(app: AppHandle) {
 
 #[tauri::command]
 pub async fn get_system_info() -> Result<Vec<SystemInfoItem>, String> {
-    tokio::task::spawn_blocking(collect_all_system_info)
+    tokio::task::spawn_blocking(collect_system_info_guarded)
         .await
-        .map_err(|e| format!("작업 실행 오류: {e}"))?
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("작업 실행 오류: {e}"))
 }
 
-fn collect_all_system_info() -> anyhow::Result<Vec<SystemInfoItem>> {
+/// 워커 스레드에서 수집을 돌리고 예산 초과 시 부분 결과를 반환한다.
+/// ponytail: 초과 시 워커 스레드는 회수하지 않고 leak — WMI 동기 호출은 취소 불가.
+/// 데스크톱 도구라 프로세스 종료 시 함께 정리되므로 허용.
+fn collect_system_info_guarded() -> Vec<SystemInfoItem> {
+    let shared: Arc<Mutex<Vec<SystemInfoItem>>> = Arc::new(Mutex::new(Vec::new()));
+    let worker_shared = Arc::clone(&shared);
+    let (tx, rx) = mpsc::channel();
+
+    std::thread::spawn(move || {
+        collect_all_system_info(&worker_shared);
+        let _ = tx.send(());
+    });
+
+    match rx.recv_timeout(SYSTEM_INFO_BUDGET) {
+        Ok(()) => shared.lock().unwrap().clone(),
+        Err(_) => {
+            let mut items = shared.lock().unwrap().clone();
+            items.push(SystemInfoItem::error(
+                "시스템 정보",
+                "일부 항목 수집이 시간 초과되어 건너뛰었습니다. WMI 저장소 손상 또는 서비스 응답 지연일 수 있습니다.",
+            ));
+            items
+        }
+    }
+}
+
+fn collect_all_system_info(shared: &Arc<Mutex<Vec<SystemInfoItem>>>) {
     let mut items = Vec::new();
+    let flush = |items: &Vec<SystemInfoItem>| {
+        *shared.lock().unwrap() = items.clone();
+    };
 
     collect_os_info(&mut items);
+    flush(&items);
     collect_cpu_info(&mut items);
+    flush(&items);
     collect_memory_info(&mut items);
+    flush(&items);
     collect_disk_info(&mut items);
+    flush(&items);
     collect_boot_info(&mut items);
+    flush(&items);
     collect_motherboard_info(&mut items);
+    flush(&items);
     collect_gpu_info(&mut items);
+    flush(&items);
     collect_power_info(&mut items);
+    flush(&items);
     collect_windows_update_info(&mut items);
+    flush(&items);
     collect_security_hook_info(&mut items);
+    flush(&items);
     event_log_service::collect_event_log_info(&mut items);
-
-    Ok(items)
+    flush(&items);
 }
 
 // ── OS 정보 (Registry) ─────────────────────────────────────────────────────

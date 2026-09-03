@@ -1,5 +1,24 @@
 # Changelog
 
+## [Release-v26.6.2] - 2026-09-03
+
+### Changed
+- 비활성화 패널의 작업 안내 문구에 Virtual Machine Platform(WSL 기능에 포함)과 Windows Credential Guard(VBS 그룹에 포함)를 명시 — 동작 변경 없이 표기만 보강
+
+### Fixed
+- 일부 PC에서 자동 점검이 68%(시스템 정보 수집) 부근에서 멈춰 더 진행되지 않던 문제 수정
+  - `run_powershell`이 응답 없는 `powershell.exe`를 무한 대기하던 것을 20초 타임아웃으로 교체하고, 초과 시 프로세스를 강제 종료 후 해당 항목만 건너뛰도록 변경 (전원 참고·Windows 업데이트 이력·보안 모듈·이벤트 로그 수집에 공통 적용)
+  - 이벤트 로그 수집을 `Get-WinEvent` 전체 열거 후 필터 → `-FilterHashtable` 서버측 필터링 + `-MaxEvents` 상한으로 변경해 크거나 손상된 로그에서 멈추지 않도록 수정
+  - 시스템 정보 수집 전체에 90초 예산을 두어, 취소 불가능한 WMI 호출이 멈추더라도 그때까지 수집한 항목과 안내 메시지를 반환하도록 변경
+  - 프론트엔드 점검 단계에 120초 타임아웃을 추가해 백엔드가 끝내 응답하지 않아도 진행바가 멈추지 않고 다음 단계로 넘어가도록 수정
+
+### 검증
+- `npm run verify:windows` 통과 (Windows 대상 Rust 코드·테스트 컴파일, clippy `-D warnings`)
+- `npm run check` 통과 (0 errors, 0 warnings)
+- PowerShell 타임아웃 강제 종료에 대한 Windows 전용 회귀 테스트 추가 (`test:rust:windows`에서 실행)
+
+---
+
 ## [Release-v26.6.1] - 2026-08-19
 
 ### Added

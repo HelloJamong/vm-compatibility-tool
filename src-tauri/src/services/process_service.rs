@@ -1,5 +1,12 @@
 /// 프로세스 서비스 — dism.exe / bcdedit.exe / shutdown.exe 실행 래퍼
-use std::process::Command;
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+
+/// PowerShell 단일 호출 최대 대기 시간.
+/// WMI/WUA/이벤트 로그 관련 스크립트가 일부 PC에서 무한 대기하는 사례가 있어
+/// 초과 시 프로세스를 강제 종료하고 해당 항목만 건너뛴다.
+const POWERSHELL_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct ProcessResult {
@@ -167,11 +174,15 @@ fn parse_bcdedit_value(output: &str, key: &str) -> Option<String> {
     None
 }
 
-/// PowerShell 스크립트 실행
+/// PowerShell 스크립트 실행 (타임아웃 포함)
 pub fn run_powershell(script: &str) -> ProcessResult {
+    run_powershell_with_timeout(script, POWERSHELL_TIMEOUT)
+}
+
+fn run_powershell_with_timeout(script: &str, timeout: Duration) -> ProcessResult {
     let wrapped_script = wrap_powershell_script(script);
 
-    Command::new("powershell.exe")
+    let spawn = Command::new("powershell.exe")
         .args([
             "-NoLogo",
             "-NoProfile",
@@ -181,10 +192,77 @@ pub fn run_powershell(script: &str) -> ProcessResult {
             "-Command",
             &wrapped_script,
         ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .creation_flags_no_window()
-        .output()
-        .map(ProcessResult::from_output)
-        .unwrap_or_else(|e| ProcessResult::error(&e.to_string()))
+        .spawn();
+
+    let mut child = match spawn {
+        Ok(child) => child,
+        Err(e) => return ProcessResult::error(&e.to_string()),
+    };
+
+    // 파이프 버퍼가 가득 차서 자식이 멈추는 것을 막기 위해 별도 스레드로 배출한다.
+    let mut stdout_pipe = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+    let out_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(pipe) = stdout_pipe.as_mut() {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    });
+    let err_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(pipe) = stderr_pipe.as_mut() {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    });
+
+    let deadline = Instant::now() + timeout;
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    timed_out = true;
+                    break None;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(_) => break None,
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&out_handle.join().unwrap_or_default()).to_string();
+    let stderr = String::from_utf8_lossy(&err_handle.join().unwrap_or_default()).to_string();
+
+    if timed_out {
+        return ProcessResult {
+            success: false,
+            stdout,
+            stderr: format!(
+                "PowerShell 실행 시간 초과({}초) — 해당 항목을 건너뜁니다",
+                timeout.as_secs()
+            ),
+            exit_code: -1,
+        };
+    }
+
+    match status {
+        Some(status) => ProcessResult {
+            success: status.success(),
+            stdout,
+            stderr,
+            exit_code: status.code().unwrap_or(-1),
+        },
+        None => ProcessResult::error("PowerShell 프로세스 상태 확인 실패"),
+    }
 }
 
 fn wrap_powershell_script(script: &str) -> String {
@@ -243,6 +321,20 @@ mod tests {
         disable_feature_args, feature_state_args, parse_bcdedit_value, parse_dism_feature_state,
         wrap_powershell_script,
     };
+
+    #[cfg(windows)]
+    #[test]
+    fn powershell_call_that_hangs_is_killed_after_timeout() {
+        use super::run_powershell_with_timeout;
+        use std::time::{Duration, Instant};
+
+        let start = Instant::now();
+        let result = run_powershell_with_timeout("Start-Sleep -Seconds 30", Duration::from_secs(2));
+
+        assert!(!result.success);
+        assert!(result.stderr.contains("시간 초과"));
+        assert!(start.elapsed() < Duration::from_secs(10), "프로세스가 강제 종료되지 않음");
+    }
 
     #[test]
     fn dism_feature_commands_force_english_output() {

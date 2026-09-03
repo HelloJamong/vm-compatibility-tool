@@ -11,28 +11,32 @@ pub fn collect_event_log_info(items: &mut Vec<SystemInfoItem>) {
     // 출력 형식:
     //   COUNT|System|2|5|12          (로그명|위험|오류|경고)
     //   RECENT|MM-dd HH:mm|System|1001|메시지 앞 80자
+    // Get-WinEvent는 -FilterHashtable로 서버측 필터링해야 빠르고, 큰/손상된 로그에서
+    // 전체 열거로 멈추는 것을 피할 수 있다. -MaxEvents로 상한도 건다.
     let ps_script = r#"
 $days = 7
 $cutoff = (Get-Date).AddDays(-$days)
 
 foreach ($logName in @('System', 'Application')) {
     try {
-        $evts = Get-WinEvent -LogName $logName -ErrorAction SilentlyContinue |
-                Where-Object { $_.TimeCreated -ge $cutoff }
-        $crit = ($evts | Where-Object { $_.Level -eq 1 } | Measure-Object).Count
-        $err  = ($evts | Where-Object { $_.Level -eq 2 } | Measure-Object).Count
-        $warn = ($evts | Where-Object { $_.Level -eq 3 } | Measure-Object).Count
+        $filter = @{ LogName = $logName; StartTime = $cutoff; Level = 1,2,3 }
+        $evts = @(Get-WinEvent -FilterHashtable $filter -MaxEvents 2000 -ErrorAction Stop)
+        $crit = @($evts | Where-Object { $_.Level -eq 1 }).Count
+        $err  = @($evts | Where-Object { $_.Level -eq 2 }).Count
+        $warn = @($evts | Where-Object { $_.Level -eq 3 }).Count
         Write-Output "COUNT|$logName|$crit|$err|$warn"
     } catch {
-        Write-Output "COUNT|$logName|오류|0|0"
+        if ($_.Exception.Message -match 'No events were found|이벤트를 찾을 수 없습니다') {
+            Write-Output "COUNT|$logName|0|0|0"
+        } else {
+            Write-Output "COUNT|$logName|오류|0|0"
+        }
     }
 }
 
 try {
-    $recent = Get-WinEvent -LogName @('System','Application') -ErrorAction SilentlyContinue |
-              Where-Object { $_.Level -in 1,2 -and $_.TimeCreated -ge $cutoff } |
-              Sort-Object TimeCreated -Descending |
-              Select-Object -First 5
+    $filter = @{ LogName = 'System','Application'; StartTime = $cutoff; Level = 1,2 }
+    $recent = @(Get-WinEvent -FilterHashtable $filter -MaxEvents 5 -ErrorAction Stop)
     foreach ($e in $recent) {
         $firstLine = ($e.Message -split "`r?`n")[0] -replace '\|','-'
         $msg = if ($firstLine.Length -gt 80) { $firstLine.Substring(0,80) + '...' } else { $firstLine }
