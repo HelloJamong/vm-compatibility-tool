@@ -13,6 +13,10 @@
 - `Win32_DeviceGuard` WMI 런타임 점검 추가 — 레지스트리 값과 무관하게 VBS/HVCI의 실제 실행 상태(`VirtualizationBasedSecurityStatus`, `SecurityServicesRunning`)를 확인해 조치 필요 여부를 판정
 - Windows Sandbox(`Containers-DisposableClientVM`) 점검·비활성화 대상에 추가 — Hyper-V 미설치 상태에서 WSL / VirtualMachinePlatform / Windows Sandbox만 설치된 경우도 처리
 - "WSL 비활성화" 그룹을 "WSL / VM 플랫폼 / Sandbox 비활성화"로 확장
+- 최초 실행 화면에 **검사 시작 / 조치 시작** 선택 추가
+  - 검사 시작: 기존과 동일하게 점검 진행 후 결과·로그 생성 및 조치 시작 메뉴 제공
+  - 조치 시작: 점검을 건너뛰고 바로 조치 선택 화면으로 이동 (점검이 진행되지 않는 환경 대응)
+  - 기존의 실행 즉시 자동 점검 동작은 제거
 
 ### 검증
 - `npm run verify:windows` 통과 (Windows 대상 Rust 코드·테스트 컴파일, clippy `-D warnings`)

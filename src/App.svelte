@@ -6,6 +6,7 @@
   import StatusBar from "./components/layout/StatusBar.svelte";
   import ConfirmDialog from "./components/common/ConfirmDialog.svelte";
   import InspectionSummaryModal from "./components/common/InspectionSummaryModal.svelte";
+  import LaunchChoiceModal from "./components/common/LaunchChoiceModal.svelte";
   import MenuPanel from "./components/menu/MenuPanel.svelte";
   import SystemInfoPanel from "./components/system/SystemInfoPanel.svelte";
   import VirtualizationPanel from "./components/virtualization/VirtualizationPanel.svelte";
@@ -45,6 +46,7 @@
   let installedProgramItems = $state<InstalledProgramItem[]>([]);
   let installedProgramsLoading = $state(false);
   let installedProgramsLoaded = $state(false);
+  let launchChoiceMade = $state(false);
   let inspectionModalOpen = $state(true);
   let inspectionSystemResultPath = $state<string | null>(null);
   let inspectionVirtResultPath = $state<string | null>(null);
@@ -100,8 +102,25 @@
     } catch {
       version = "dev";
     }
-    // 앱 시작 시 자동 점검 — 패널 전환 없이 백그라운드 실행
-    status = "자동 점검 시작 중...";
+  });
+
+  // 최초 화면: "검사 시작" 클릭 시 실행
+  async function beginInspection() {
+    if (launchChoiceMade) return;
+    launchChoiceMade = true;
+    await runInspection();
+  }
+
+  // 최초 화면: "조치 시작" 클릭 시 검사를 건너뛰고 바로 조치 화면으로
+  function beginActionDirectly() {
+    if (launchChoiceMade) return;
+    launchChoiceMade = true;
+    inspectionModalOpen = false;
+    openDisableActionModal();
+  }
+
+  async function runInspection() {
+    status = "점검 시작 중...";
     inspectionStage = "collecting";
     inspectionActiveTask = "preparing";
     startInspectionProgressTimer();
@@ -136,7 +155,7 @@
     status = inspectionSystemResultPath && inspectionVirtResultPath && inspectionInstalledProgramsResultPath
       ? `점검 완료 — ${basename(inspectionSystemResultPath)}, ${basename(inspectionVirtResultPath)}, ${basename(inspectionInstalledProgramsResultPath)} 저장됨`
       : "점검 완료 — 비활성화 준비됨";
-  });
+  }
 
   function showPanel(panel: Panel) {
     currentPanel = panel;
@@ -591,6 +610,12 @@
     onRebootNow={rebootNow}
     onCancelReboot={cancelReboot}
     onDismiss={closeDisableActionModal}
+  />
+{:else if !launchChoiceMade}
+  <LaunchChoiceModal
+    {version}
+    onStartInspection={beginInspection}
+    onStartActionDirectly={beginActionDirectly}
   />
 {:else if inspectionModalOpen}
   <InspectionSummaryModal
