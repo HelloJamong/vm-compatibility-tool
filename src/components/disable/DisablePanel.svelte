@@ -63,10 +63,10 @@
     <p class="font-bold mb-1.5">⚠️ 이 작업은 다음을 수행합니다</p>
     <ul class="list-disc list-inside space-y-0.5 text-xs text-red-700">
       <li>Hyper-V 및 관련 기능 제거 (DISM)</li>
-      <li>WSL + Virtual Machine Platform 제거 (DISM)</li>
-      <li>VBS(가상화 기반 보안) 및 Windows Credential Guard 레지스트리 비활성화</li>
-      <li>코어 격리 비활성화</li>
-      <li>Hypervisor 시작 유형 비활성화 (bcdedit)</li>
+      <li>WSL + Virtual Machine Platform + Windows Sandbox 제거 (DISM)</li>
+      <li>VBS(가상화 기반 보안) 및 Windows Credential Guard 레지스트리 비활성화 (값이 없으면 0으로 생성)</li>
+      <li>코어 격리(메모리 무결성) 비활성화</li>
+      <li>Hypervisor / VSM 시작 유형 비활성화 (bcdedit — Hyper-V·VBS·코어 격리 조치 시 자동 포함)</li>
     </ul>
   </div>
 
@@ -82,8 +82,8 @@
       <div class="grid grid-cols-2 gap-1.5">
         {#each [
           { label: "Hyper-V 비활성화", on: disableOptions.hyperv },
-          { label: "WSL 비활성화", on: disableOptions.wsl },
-          { label: "VBS 레지스트리 비활성화", on: disableOptions.vbs },
+          { label: "WSL / VM 플랫폼 / Sandbox 비활성화", on: disableOptions.wsl },
+          { label: "VBS / Credential Guard 비활성화", on: disableOptions.vbs },
           { label: "코어 격리 비활성화", on: disableOptions.core_isolation },
         ] as task}
           <div class="flex items-center gap-1.5 text-xs">

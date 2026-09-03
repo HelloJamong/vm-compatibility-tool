@@ -56,13 +56,42 @@ fn collect_virtualization_status() -> anyhow::Result<Vec<VirtualizationItem>> {
     check_hardware_virtualization(&mut items);
     check_hyperv_status(&mut items);
     check_wsl_status(&mut items);
-    check_hypervisor_launch(&mut items);
-    check_vsm_launch(&mut items);
+    check_device_guard_runtime(&mut items);
+
+    // 하이퍼바이저 시작 유형은 "미설정"이면 기본값 Auto라, 앞선 점검에서
+    // VBS 실행 중이거나 하이퍼바이저 소비 기능(Hyper-V/VMP/WSL/Sandbox)이 켜져 있으면
+    // 조치 대상으로 판정한다.
+    let ctx = HypervisorContext::from_items(&items);
+    check_hypervisor_launch(&mut items, &ctx);
+    check_vsm_launch(&mut items, &ctx);
     check_registry_manifest_status(&mut items);
     check_windows_hello_status(&mut items);
     check_organization_control(&mut items);
 
     Ok(items)
+}
+
+/// 하이퍼바이저 시작 유형 해석에 필요한 주변 상태
+struct HypervisorContext {
+    /// Win32_DeviceGuard 기준 VBS가 실행 중이거나 설정됨
+    vbs_active: bool,
+    /// Hyper-V / VirtualMachinePlatform / WSL / Windows Sandbox 중 하나라도 활성
+    consumer_feature_on: bool,
+}
+
+impl HypervisorContext {
+    fn from_items(items: &[VirtualizationItem]) -> Self {
+        Self {
+            vbs_active: items.iter().any(|item| {
+                item.source_type == VirtualizationSource::Wmi
+                    && item.disable_group == Some(DisableGroup::Vbs)
+                    && item.action_required
+            }),
+            consumer_feature_on: items.iter().any(|item| {
+                item.source_type == VirtualizationSource::Feature && item.action_required
+            }),
+        }
+    }
 }
 
 // ── 하드웨어 가상화 (WMI Win32_Processor) ─────────────────────────────────
@@ -171,6 +200,7 @@ fn check_wsl_status(items: &mut Vec<VirtualizationItem>) {
     let features = [
         ("Microsoft-Windows-Subsystem-Linux", "WSL"),
         ("VirtualMachinePlatform", "가상 머신 플랫폼 (WSL2)"),
+        ("Containers-DisposableClientVM", "Windows Sandbox"),
     ];
 
     for (feature, label) in features {
@@ -209,52 +239,165 @@ fn check_wsl_status(items: &mut Vec<VirtualizationItem>) {
 
 // ── Hypervisor 시작 유형 (bcdedit) ─────────────────────────────────────────
 
-fn check_hypervisor_launch(items: &mut Vec<VirtualizationItem>) {
+/// bcdedit launch 유형 문자열 + 주변 컨텍스트로 조치 필요 여부 판정 (순수 로직)
+///
+/// - 명시적으로 off 가 아닌 값(Auto 등) → 조치 필요
+/// - "미설정"(BCD에 항목 없음, 기본 Auto) → `unset_triggers` 가 true 일 때만 조치 필요
+/// - "확인 불가" / "오류" → 조치 대상 아님
+fn launch_type_action_required(launch_type: &str, unset_triggers: bool) -> bool {
+    let is_error =
+        launch_type.eq_ignore_ascii_case("확인 불가") || launch_type.starts_with("오류");
+    let is_unset = launch_type.eq_ignore_ascii_case("미설정");
+    let is_explicit_active =
+        !is_error && !is_unset && !launch_type.eq_ignore_ascii_case("off");
+    is_explicit_active || (is_unset && unset_triggers)
+}
+
+fn check_hypervisor_launch(items: &mut Vec<VirtualizationItem>, ctx: &HypervisorContext) {
     let launch_type = process_service::get_hypervisor_launch_type();
     let is_unknown =
         launch_type.eq_ignore_ascii_case("확인 불가") || launch_type.starts_with("오류");
-    let is_active = !is_unknown && !launch_type.eq_ignore_ascii_case("off");
+    let is_unset = launch_type.eq_ignore_ascii_case("미설정");
+
+    // 미설정(기본 Auto)은 VBS 실행 중이거나 하이퍼바이저 소비 기능이 켜져 있을 때만 조치 대상
+    let action_required =
+        launch_type_action_required(&launch_type, ctx.vbs_active || ctx.consumer_feature_on);
+
+    let status = if is_unset {
+        "미설정 (기본값 Auto)".to_string()
+    } else {
+        launch_type.clone()
+    };
+    let recommendation = if action_required {
+        "VM 호환을 위해 hypervisorlaunchtype off 필요 — Hyper-V 또는 VBS 비활성화 조치에 포함됩니다"
+    } else {
+        ""
+    };
 
     items.push(
         VirtualizationItem::new(
             "Hypervisor 시작 유형",
-            &launch_type,
+            &status,
             &format!("bcdedit hypervisorlaunchtype: {launch_type}"),
-            if is_active {
-                "비활성화를 위해 bcdedit /set hypervisorlaunchtype off 실행 필요"
-            } else {
-                ""
-            },
+            recommendation,
         )
         .with_source(VirtualizationSource::Bcd)
-        .with_disable_group(DisableGroup::Hyperv, is_active)
+        .with_disable_group(DisableGroup::Hyperv, action_required)
         .with_unknown(is_unknown),
     );
 }
 
 // ── VSM 시작 유형 (bcdedit vsmlaunchtype) ──────────────────────────────────
 
-fn check_vsm_launch(items: &mut Vec<VirtualizationItem>) {
+fn check_vsm_launch(items: &mut Vec<VirtualizationItem>, ctx: &HypervisorContext) {
     let vsm_type = process_service::get_vsm_launch_type();
     let is_unknown = vsm_type.eq_ignore_ascii_case("확인 불가") || vsm_type.starts_with("오류");
-    let is_active = !is_unknown && !matches!(vsm_type.to_lowercase().as_str(), "off" | "미설정");
+
+    let action_required = launch_type_action_required(&vsm_type, ctx.vbs_active);
+
+    let recommendation = if action_required {
+        "VM 호환을 위해 vsmlaunchtype off 필요 — Hyper-V 또는 VBS 비활성화 조치에 포함됩니다"
+    } else {
+        ""
+    };
 
     items.push(
         VirtualizationItem::new(
             "VSM 시작 유형 (vsmlaunchtype)",
             &vsm_type,
             &format!("bcdedit vsmlaunchtype: {vsm_type}"),
-            if is_active {
-                "비활성화를 위해 bcdedit /set vsmlaunchtype off 실행 필요"
+            recommendation,
+        )
+        .with_source(VirtualizationSource::Bcd)
+        .with_disable_group(DisableGroup::Hyperv, action_required)
+        .with_unknown(is_unknown),
+    );
+}
+
+// ── VBS / HVCI 런타임 상태 (WMI Win32_DeviceGuard) ────────────────────────
+
+#[cfg(windows)]
+fn check_device_guard_runtime(items: &mut Vec<VirtualizationItem>) {
+    use crate::services::wmi_service::{device_guard, windows as wmi};
+
+    let guard = match wmi::get_device_guard() {
+        Ok(list) => list.into_iter().next(),
+        Err(error) => {
+            items.push(
+                VirtualizationItem::new(
+                    "VBS 런타임 상태",
+                    "확인 불가",
+                    &error.to_string(),
+                    "",
+                )
+                .with_source(VirtualizationSource::Wmi)
+                .with_disable_group(DisableGroup::Vbs, false)
+                .with_unknown(true),
+            );
+            return;
+        }
+    };
+
+    let Some(guard) = guard else {
+        items.push(
+            VirtualizationItem::new(
+                "VBS 런타임 상태",
+                "확인 불가",
+                "Win32_DeviceGuard 인스턴스가 없습니다",
+                "",
+            )
+            .with_source(VirtualizationSource::Wmi)
+            .with_disable_group(DisableGroup::Vbs, false)
+            .with_unknown(true),
+        );
+        return;
+    };
+
+    let status = guard.virtualization_based_security_status;
+    let configured = guard.security_services_configured.unwrap_or_default();
+    let running = guard.security_services_running.unwrap_or_default();
+
+    let vbs_action = device_guard::vbs_action_required(status);
+    items.push(
+        VirtualizationItem::new(
+            "VBS 런타임 상태",
+            device_guard::vbs_status_label(status),
+            &format!(
+                "VirtualizationBasedSecurityStatus={}, 실행 중 서비스={:?}",
+                status.map(|s| s.to_string()).unwrap_or_else(|| "?".into()),
+                running
+            ),
+            if vbs_action {
+                "레지스트리 값과 무관하게 VBS가 활성 상태입니다 — VBS 비활성화 조치가 필요합니다"
             } else {
                 ""
             },
         )
-        .with_source(VirtualizationSource::Bcd)
-        .with_disable_group(DisableGroup::Hyperv, is_active)
-        .with_unknown(is_unknown),
+        .with_source(VirtualizationSource::Wmi)
+        .with_disable_group(DisableGroup::Vbs, vbs_action),
     );
+
+    let hvci_action = device_guard::hvci_action_required(&configured, &running);
+    if hvci_action {
+        items.push(
+            VirtualizationItem::new(
+                "메모리 무결성 런타임 상태 (HVCI)",
+                if running.contains(&device_guard::HVCI) {
+                    "실행 중"
+                } else {
+                    "사용하도록 설정됨"
+                },
+                &format!("SecurityServicesRunning={running:?}"),
+                "레지스트리 값과 무관하게 HVCI가 활성 상태입니다 — 코어 격리 비활성화 조치가 필요합니다",
+            )
+            .with_source(VirtualizationSource::Wmi)
+            .with_disable_group(DisableGroup::CoreIsolation, true),
+        );
+    }
 }
+
+#[cfg(not(windows))]
+fn check_device_guard_runtime(_items: &mut Vec<VirtualizationItem>) {}
 
 // ── 레지스트리 기반 VBS / 코어 격리 상태 ───────────────────────────────────
 
@@ -574,7 +717,11 @@ fn detect_organization_control() -> (bool, String) {
 
 #[cfg(test)]
 mod tests {
-    use super::{feature_state, registry_inspect_status, FeatureState, RegistryRead};
+    use super::{
+        feature_state, launch_type_action_required, registry_inspect_status, FeatureState,
+        HypervisorContext, RegistryRead,
+    };
+    use crate::models::virtualization::{DisableGroup, VirtualizationItem, VirtualizationSource};
     use crate::services::process_service::ProcessResult;
 
     fn process_result(success: bool, stdout: &str, stderr: &str) -> ProcessResult {
@@ -616,5 +763,56 @@ mod tests {
         }];
 
         assert_eq!(registry_inspect_status(&values), "확인 불가");
+    }
+
+    #[test]
+    fn explicit_auto_launch_type_always_needs_action() {
+        assert!(launch_type_action_required("Auto", false));
+        assert!(launch_type_action_required("AutoDetect", false));
+    }
+
+    #[test]
+    fn off_launch_type_never_needs_action() {
+        assert!(!launch_type_action_required("Off", false));
+        assert!(!launch_type_action_required("off", true));
+    }
+
+    #[test]
+    fn unset_launch_type_needs_action_only_when_triggered() {
+        // BCD에 항목 없음(기본 Auto) — VBS 실행 중이거나 소비 기능이 있을 때만 조치
+        assert!(!launch_type_action_required("미설정", false));
+        assert!(launch_type_action_required("미설정", true));
+    }
+
+    #[test]
+    fn unreadable_launch_type_never_needs_action() {
+        assert!(!launch_type_action_required("확인 불가", true));
+        assert!(!launch_type_action_required("오류: bcdedit 실패", true));
+    }
+
+    fn wmi_vbs_item(action_required: bool) -> VirtualizationItem {
+        VirtualizationItem::new("VBS 런타임 상태", "실행 중", "", "")
+            .with_source(VirtualizationSource::Wmi)
+            .with_disable_group(DisableGroup::Vbs, action_required)
+    }
+
+    fn feature_item(action_required: bool) -> VirtualizationItem {
+        VirtualizationItem::new("가상 머신 플랫폼 (WSL2)", "설치됨 (활성)", "", "")
+            .with_source(VirtualizationSource::Feature)
+            .with_disable_group(DisableGroup::Wsl, action_required)
+    }
+
+    #[test]
+    fn context_detects_runtime_vbs_even_without_features() {
+        let ctx = HypervisorContext::from_items(&[wmi_vbs_item(true), feature_item(false)]);
+        assert!(ctx.vbs_active);
+        assert!(!ctx.consumer_feature_on);
+    }
+
+    #[test]
+    fn context_detects_consumer_feature_without_hyperv() {
+        let ctx = HypervisorContext::from_items(&[wmi_vbs_item(false), feature_item(true)]);
+        assert!(!ctx.vbs_active);
+        assert!(ctx.consumer_feature_on);
     }
 }

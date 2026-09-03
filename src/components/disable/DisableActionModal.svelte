@@ -49,29 +49,34 @@
 
   let rebootDeclined = $state(false);
 
+  const hypervisorBootIncluded = $derived(
+    disableOptions.hyperv || disableOptions.vbs || disableOptions.core_isolation
+  );
+
   const taskList = $derived([
     {
       key: "hyperv" as DisableGroup,
-      label: "Hyper-V 및 하이퍼바이저 비활성화",
-      description: "Hyper-V 관련 Windows 기능 제거와 hypervisorlaunchtype / vsmlaunchtype off를 함께 수행합니다.",
+      label: "Hyper-V 비활성화",
+      description: "Hyper-V 관련 Windows 기능을 제거합니다.",
       on: disableOptions.hyperv,
     },
     {
       key: "wsl" as DisableGroup,
-      label: "WSL 기능 비활성화",
-      description: "WSL 및 VirtualMachinePlatform Windows 기능을 비활성화합니다.",
+      label: "WSL / VM 플랫폼 / Sandbox 비활성화",
+      description: "WSL · VirtualMachinePlatform · Windows Sandbox Windows 기능을 비활성화합니다.",
       on: disableOptions.wsl,
     },
     {
       key: "vbs" as DisableGroup,
-      label: "VBS 레지스트리 비활성화",
-      description: "DeviceGuard / Credential Guard / LSA 관련 VBS 값을 비활성 상태로 변경합니다.",
+      label: "VBS / Credential Guard 비활성화",
+      description:
+        "DeviceGuard / Credential Guard / LSA 레지스트리 값을 비활성으로 변경하고, 값이 없으면 0으로 생성합니다. 런타임(Win32_DeviceGuard) 기준으로 VBS 활성 여부를 판정합니다.",
       on: disableOptions.vbs,
     },
     {
       key: "core_isolation" as DisableGroup,
-      label: "코어 격리 비활성화",
-      description: "HVCI 및 코어 격리 관련 레지스트리 값을 비활성 상태로 변경합니다.",
+      label: "코어 격리(메모리 무결성) 비활성화",
+      description: "HVCI 관련 레지스트리 값을 비활성으로 변경하고, 값이 없으면 0으로 생성합니다.",
       on: disableOptions.core_isolation,
     },
   ]);
@@ -130,6 +135,11 @@
                 </label>
               {/each}
             </div>
+            {#if hypervisorBootIncluded}
+              <p class="auto-task-note">
+                ⤷ 하이퍼바이저 부팅 비활성화(<code>bcdedit /set hypervisorlaunchtype off</code> · <code>vsmlaunchtype off</code>)가 자동 포함됩니다.
+              </p>
+            {/if}
           </section>
 
           {#if optionalRegistryCandidates.length > 0}
@@ -426,6 +436,20 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
+  }
+
+  .auto-task-note {
+    margin: 10px 2px 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: #5a6a82;
+  }
+
+  .auto-task-note code {
+    font-size: 11px;
+    background: #e7edf6;
+    border-radius: 4px;
+    padding: 1px 4px;
   }
 
   .action-option-item {

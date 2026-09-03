@@ -1,5 +1,26 @@
 # Changelog
 
+## [Release-v26.6.3] - 2026-09-03
+
+### Fixed
+- 일부 PC에서 "VBS 비활성화"를 실행해도 재부팅 후 VBS가 그대로 활성이던 문제 수정
+  - VBS 비활성화 조치가 `DeviceGuard` 레지스트리 값 쓰기만 수행하고, `hypervisorlaunchtype` / `vsmlaunchtype` off는 별도의 Hyper-V 그룹에만 있었음. 하이퍼바이저가 부팅 시 로드되면 레지스트리 값과 무관하게 VBS가 다시 활성화되므로 조치가 반영되지 않았음
+  - `bcdedit /set hypervisorlaunchtype off` + `vsmlaunchtype off`를 **"하이퍼바이저 부팅 비활성화"** 단일 작업으로 분리하고, Hyper-V·VBS·코어 격리 중 하나라도 선택되면 자동 실행
+  - `EnableVirtualizationBasedSecurity`, HVCI `Enabled` 등 DeviceGuard 핵심 값이 **없을 때 0으로 생성** (Windows 11 기본값으로 VBS가 켜진 상태 대응). 정책 경로(`SOFTWARE\Policies\`) 값은 신설하지 않음
+  - `hypervisorlaunchtype`이 BCD에 없을 때 `"확인 불가"`가 아니라 `"미설정 (기본값 Auto)"`로 판정하고, VBS 실행 중이거나 하이퍼바이저 소비 기능이 있으면 조치 대상으로 표시
+
+### Added
+- `Win32_DeviceGuard` WMI 런타임 점검 추가 — 레지스트리 값과 무관하게 VBS/HVCI의 실제 실행 상태(`VirtualizationBasedSecurityStatus`, `SecurityServicesRunning`)를 확인해 조치 필요 여부를 판정
+- Windows Sandbox(`Containers-DisposableClientVM`) 점검·비활성화 대상에 추가 — Hyper-V 미설치 상태에서 WSL / VirtualMachinePlatform / Windows Sandbox만 설치된 경우도 처리
+- "WSL 비활성화" 그룹을 "WSL / VM 플랫폼 / Sandbox 비활성화"로 확장
+
+### 검증
+- `npm run verify:windows` 통과 (Windows 대상 Rust 코드·테스트 컴파일, clippy `-D warnings`)
+- `npm run check` / `npm run build` 통과
+- 런타임 판정·하이퍼바이저 부팅 작업 조건·정책 경로 구분에 대한 단위 테스트 추가
+
+---
+
 ## [Release-v26.6.2] - 2026-09-03
 
 ### Changed

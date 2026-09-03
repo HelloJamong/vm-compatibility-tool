@@ -109,8 +109,9 @@ pub fn get_hypervisor_launch_type() -> String {
                 return format_process_output_error(&output);
             }
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            // BCD에 항목이 없으면 기본값 Auto — "확인 불가"(읽기 실패)와 구분해 "미설정" 반환
             parse_bcdedit_value(&stdout, "hypervisorlaunchtype")
-                .unwrap_or_else(|| "확인 불가".to_string())
+                .unwrap_or_else(|| "미설정".to_string())
         }
         Err(e) => format!("오류: {}", e),
     }

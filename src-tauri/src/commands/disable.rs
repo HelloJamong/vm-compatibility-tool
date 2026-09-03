@@ -23,6 +23,8 @@ const HYPERV_FEATURES: &[&str] = &[
 const WSL_FEATURES: &[&str] = &[
     "Microsoft-Windows-Subsystem-Linux",
     "VirtualMachinePlatform",
+    // Windows Sandbox — VirtualMachinePlatform + 하이퍼바이저를 사용하므로 함께 비활성화
+    "Containers-DisposableClientVM",
 ];
 
 #[derive(Debug, Clone)]
@@ -72,6 +74,12 @@ fn require_disable_options(options: Option<DisableOptions>) -> Result<DisableOpt
     options.ok_or_else(|| "비활성화 옵션이 누락되어 작업을 중단했습니다.".to_string())
 }
 
+/// 하이퍼바이저 부팅(bcdedit) 조치가 필요한지 — Hyper-V·VBS·코어 격리 중 하나라도 선택되면 필요.
+/// VBS/HVCI는 하이퍼바이저가 부팅 시 로드되면 다시 활성화되므로 레지스트리 조치만으로는 부족하다.
+fn hypervisor_boot_task_needed(opts: &DisableOptions) -> bool {
+    opts.hyperv || opts.vbs || opts.core_isolation
+}
+
 fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<DisableOutput> {
     log_service::init();
 
@@ -81,6 +89,14 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
     type TaskFn = Box<dyn Fn() -> DisableResult>;
     let mut tasks: Vec<(String, TaskFn)> = Vec::new();
 
+    // 하이퍼바이저 부팅(bcdedit)은 Hyper-V·VBS·코어 격리 어느 것을 끄든 필요하다.
+    // VBS/HVCI는 하이퍼바이저가 부팅 시 로드되면 레지스트리 값과 무관하게 다시 활성화될 수 있다.
+    if hypervisor_boot_task_needed(&opts) {
+        tasks.push((
+            "하이퍼바이저 부팅 비활성화".to_string(),
+            Box::new(disable_hypervisor_boot),
+        ));
+    }
     if opts.hyperv {
         tasks.push((
             "Hyper-V 기능 비활성화".to_string(),
@@ -88,7 +104,10 @@ fn run_disable_tasks(app: &AppHandle, opts: DisableOptions) -> anyhow::Result<Di
         ));
     }
     if opts.wsl {
-        tasks.push(("WSL 비활성화".to_string(), Box::new(disable_wsl)));
+        tasks.push((
+            "WSL / VM 플랫폼 / Sandbox 비활성화".to_string(),
+            Box::new(disable_wsl),
+        ));
     }
     if opts.vbs {
         let skip = opts.skip_policy_keys;
@@ -237,6 +256,23 @@ fn push_artifact_failure(
 fn collect_planned_disable_changes(opts: &DisableOptions) -> Vec<PlannedDisableChange> {
     let mut changes = Vec::new();
 
+    if hypervisor_boot_task_needed(opts) {
+        push_change(
+            &mut changes,
+            "하이퍼바이저",
+            "Hypervisor 시작 유형",
+            "bcdedit hypervisorlaunchtype",
+            ChangeTarget::HypervisorLaunchType,
+        );
+        push_change(
+            &mut changes,
+            "하이퍼바이저",
+            "VSM 시작 유형",
+            "bcdedit vsmlaunchtype",
+            ChangeTarget::VsmLaunchType,
+        );
+    }
+
     if opts.hyperv {
         for feature in HYPERV_FEATURES {
             push_change(
@@ -247,20 +283,6 @@ fn collect_planned_disable_changes(opts: &DisableOptions) -> Vec<PlannedDisableC
                 ChangeTarget::Feature(feature),
             );
         }
-        push_change(
-            &mut changes,
-            "Hyper-V",
-            "Hypervisor 시작 유형",
-            "bcdedit hypervisorlaunchtype",
-            ChangeTarget::HypervisorLaunchType,
-        );
-        push_change(
-            &mut changes,
-            "Hyper-V",
-            "VSM 시작 유형",
-            "bcdedit vsmlaunchtype",
-            ChangeTarget::VsmLaunchType,
-        );
     }
 
     if opts.wsl {
@@ -484,6 +506,29 @@ fn classify_feature_disable(r: &process_service::ProcessResult) -> FeatureDisabl
     FeatureDisableOutcome::Failed(err)
 }
 
+/// bcdedit으로 하이퍼바이저/VSM 부팅을 끈다. Hyper-V·VBS·코어 격리 조치 공통 선행 작업.
+fn disable_hypervisor_boot() -> DisableResult {
+    let mut messages = Vec::new();
+    let mut all_success = true;
+
+    let bcd = process_service::disable_hypervisor_launch();
+    if bcd.success {
+        messages.push("✓ hypervisorlaunchtype off".to_string());
+    } else {
+        messages.push(format!("✗ bcdedit hypervisorlaunchtype 실패: {}", bcd.stderr));
+        all_success = false;
+    }
+
+    let vsm = process_service::disable_vsm_launch();
+    record_vsm_disable_result(&vsm, &mut messages, &mut all_success);
+
+    DisableResult {
+        task: "하이퍼바이저 부팅 비활성화".to_string(),
+        success: all_success,
+        message: messages.join("\n"),
+    }
+}
+
 fn disable_hyperv() -> DisableResult {
     let mut messages = Vec::new();
     let mut all_success = true;
@@ -501,17 +546,6 @@ fn disable_hyperv() -> DisableResult {
             }
         }
     }
-
-    let bcd = process_service::disable_hypervisor_launch();
-    if bcd.success {
-        messages.push("✓ hypervisorlaunchtype off".to_string());
-    } else {
-        messages.push(format!("✗ bcdedit 실패: {}", bcd.stderr));
-        all_success = false;
-    }
-
-    let vsm = process_service::disable_vsm_launch();
-    record_vsm_disable_result(&vsm, &mut messages, &mut all_success);
 
     DisableResult {
         task: "Hyper-V 비활성화".to_string(),
@@ -560,10 +594,14 @@ fn disable_wsl() -> DisableResult {
     }
 
     DisableResult {
-        task: "WSL 비활성화".to_string(),
+        task: "WSL / VM 플랫폼 / Sandbox 비활성화".to_string(),
         success: all_success,
         message: messages.join("\n"),
     }
+}
+
+fn is_policy_path(path: &str) -> bool {
+    path.starts_with(r"SOFTWARE\Policies\")
 }
 
 fn disable_registry_group(
@@ -576,7 +614,7 @@ fn disable_registry_group(
     let (skipped, entries): (Vec<_>, Vec<_>) = if skip_policy_keys {
         all_entries
             .into_iter()
-            .partition(|e| e.path.starts_with(r"SOFTWARE\Policies\"))
+            .partition(|e| is_policy_path(&e.path))
     } else {
         (vec![], all_entries)
     };
@@ -637,11 +675,29 @@ fn apply_registry_entries(
                     entry.label, entry.path, entry.value_name, current_value
                 ));
             }
-            None => {
+            None if is_policy_path(&entry.path) => {
+                // 정책 경로는 없던 값을 새로 만들지 않는다 (로컬 GPO 신설 방지).
                 messages.push(format!(
-                    "- {} — {}\\{} (값 없음, 생성하지 않음)",
+                    "- {} — {}\\{} (정책 값 없음, 생성하지 않음)",
                     entry.label, entry.path, entry.value_name
                 ));
+            }
+            None => {
+                // 값이 없으면 OS 기본값으로 VBS/HVCI가 켜져 있을 수 있으므로,
+                // 목표값(0)을 명시적으로 생성해 비활성 상태를 고정한다.
+                match reg::set_dword(&entry.path, entry.value_name, target_value) {
+                    Ok(_) => messages.push(format!(
+                        "✓ {} — {}\\{}: <미설정> → {} (생성)",
+                        entry.label, entry.path, entry.value_name, target_value
+                    )),
+                    Err(error) => {
+                        messages.push(format!(
+                            "✗ {} — {}\\{}: 생성 실패 {}",
+                            entry.label, entry.path, entry.value_name, error
+                        ));
+                        success = false;
+                    }
+                }
             }
         }
     }
@@ -690,6 +746,41 @@ mod tests {
     #[test]
     fn missing_disable_options_are_rejected() {
         assert!(require_disable_options(None).is_err());
+    }
+
+    fn opts(hyperv: bool, wsl: bool, vbs: bool, core_isolation: bool) -> DisableOptions {
+        DisableOptions {
+            hyperv,
+            wsl,
+            vbs,
+            core_isolation,
+            optional_registry_ids: vec![],
+            skip_policy_keys: false,
+        }
+    }
+
+    #[test]
+    fn hypervisor_boot_runs_for_vbs_only_without_hyperv() {
+        assert!(hypervisor_boot_task_needed(&opts(false, false, true, false)));
+        assert!(hypervisor_boot_task_needed(&opts(false, false, false, true)));
+    }
+
+    #[test]
+    fn hypervisor_boot_skipped_for_wsl_only() {
+        assert!(!hypervisor_boot_task_needed(&opts(false, true, false, false)));
+    }
+
+    #[test]
+    fn wsl_features_include_sandbox() {
+        assert!(WSL_FEATURES.contains(&"Containers-DisposableClientVM"));
+        assert!(WSL_FEATURES.contains(&"VirtualMachinePlatform"));
+    }
+
+    #[test]
+    fn policy_paths_are_recognized() {
+        assert!(is_policy_path(r"SOFTWARE\Policies\Microsoft\Windows\DeviceGuard"));
+        assert!(!is_policy_path(r"SYSTEM\CurrentControlSet\Control\DeviceGuard"));
+        assert!(!is_policy_path(r"SYSTEM\CurrentControlSet\Control\Lsa"));
     }
 
     #[test]
